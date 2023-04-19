@@ -31,3 +31,10 @@ docs/source/images/
 docs/source/examples/
 docs/source/*md
 blenderproc_resources/
+docs/source/docs/tutorials/writer.md
+docs/source/docs/tutorials/renderer.md
+docs/source/docs/tutorials/physics.md
+docs/source/docs/tutorials/loader.md
+docs/source/docs/tutorials/key_frames.md
+docs/source/docs/tutorials/camera.md
+Mambaforge-Linux-x86_64.sh
