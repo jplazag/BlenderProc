@@ -6,7 +6,7 @@ from blenderproc.python.utility.CollisionUtility import CollisionUtility
 from typing import Dict
 import mathutils
 import glob
-import pandas as pd
+# import pandas as pd
 
 parser = argparse.ArgumentParser()
 parser.add_argument("front", help="Path to the 3D front file")
@@ -65,6 +65,18 @@ for obj in room_objs:
     if "table" in obj.get_name().lower() or "desk" in obj.get_name().lower():
         sample_surface_objects.append(obj)
 
+
+
+# objects_of_interest = [ "op_microwave","red_mug"]
+
+# Objects from ODB that are going to be placed, we also store the size and some tags that tell us what kind of relations
+# that specific object allows
+# tags = [on, in]
+objects_of_interest = [ {"name": "op_microwave", "size": 0,  "tags": [True,     True]},
+                        {"name": "red_mug",      "size": 0,  "tags": [False,    False]}]
+
+object_of_interest_counter = 0
+
 for obj in sample_surface_objects:
     # The loop starts with and UndoAfterExecution in order to clean up the cam poses from the previous iteration and
     # also remove the dropped objects and restore the sliced up objects.
@@ -76,15 +88,15 @@ for obj in sample_surface_objects:
 
         surface_height_z = np.mean(surface_obj.get_bound_box(), axis=0)[2]
         
-        # Objects from ODB that are going to be placed
-        objects_of_interest = [ "op_microwave","red_mug",]
+        
+        
 
         dropped_object_list = []
 
         for name in objects_of_interest:
 
             # Take the object to be placed
-            path_to_object = glob.glob(args.treed_obj_path + '/' + name + '/geometry/' + name + '*.obj')
+            path_to_object = glob.glob(args.treed_obj_path + '/' + name["name"] + '/geometry/' + name["name"] + '*.obj')
 
             # Load the object, which should be sampled on the surface
             sampling_obj = bproc.loader.load_obj(path_to_object[0])
@@ -129,7 +141,7 @@ for obj in sample_surface_objects:
         print("################################################")
         print("\n")
 
-        # Enable physics for spheres (active) and the surface (passive)
+        # Enable physics for objects of interest (active) and the surface (passive)
         for dropped_object in dropped_object_list:
             dropped_object.enable_rigidbody(True)
         surface_obj.enable_rigidbody(False)
@@ -148,14 +160,15 @@ for obj in sample_surface_objects:
         objects_boxes = []
         remove_list = []
         for index, dropped_object in enumerate(dropped_object_list):
-            # if distance is smaller than 5 cm
+            
             print(f"Object: {dropped_object.get_name()} has a diff of: {abs(min_coord_z - surface_height_z)}m to the surface")
+            # if distance is smaller than 5 cm delete for wrong positioning
             if abs(min_coord_z - surface_height_z) > 0.05:
                 print("Delete this object, distance is above 0.05m")
                 dropped_object.delete()
                 remove_list.append(index)
 
-        # remove deleted elements from dropped object list
+            # remove deleted elements from dropped object list
             for ele in remove_list[::-1]:
                 del dropped_object_list[ele]
                 continue
@@ -164,6 +177,11 @@ for obj in sample_surface_objects:
                 print(f"List is empty after removal of objects")
                 # skip if no object is left
                 continue
+
+            # Set the custom propierty in the remaining objects of interest
+            dropped_object.set_cp("category_id", object_of_interest_counter + 1)
+
+            object_of_interest_counter += 1
 
             # Store the bounding boxes of the objects to calculate their size and location later
             objects_boxes.extend(dropped_object.get_bound_box())
@@ -206,8 +224,22 @@ for obj in sample_surface_objects:
                 break
         if cam_counter == 0:
             raise Exception("No valid camera pose found!")
-    
+
+        bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance", "name"])
+
         data = bproc.renderer.render()
 
+        print(data)
+
         # write the data to a .hdf5 container
+        
+
+        bproc.writer.write_coco_annotations(os.path.join(args.output_dir, 'coco_data'),
+                                            instance_segmaps=data["instance_segmaps"],
+                                            instance_attribute_maps=data["instance_attribute_maps"],
+                                            colors=data["colors"],
+                                            color_file_format="JPEG",
+                                            )
+        
         bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
+    break
