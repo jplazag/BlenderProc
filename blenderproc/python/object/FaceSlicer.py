@@ -156,6 +156,18 @@ def extract_floor(mesh_objects: List[MeshObject], compare_angle_degrees: float =
             if counter:
                 obj.update_from_bmesh(bm)
                 bpy.ops.mesh.separate(type='SELECTED')
+            selected_objects = bpy.context.selected_objects
+            if selected_objects:
+                if len(selected_objects) == 2:
+                    selected_objects = [o for o in selected_objects
+                                        if o != bpy.context.view_layer.objects.active]
+                    selected_objects[0].name = new_name_for_object
+                    newly_created_objects.append(MeshObject(selected_objects[0]))
+                else:
+                    break
+                    # raise RuntimeError("There is more than one selection after splitting, this should not happen!")
+            else:
+                raise RuntimeError("No floor object was constructed!")
         else:
             # no height list was provided, try to estimate them on its own
 
