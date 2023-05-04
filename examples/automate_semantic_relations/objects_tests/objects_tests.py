@@ -62,6 +62,7 @@ bproc.camera.set_resolution(512, 512)
 # Load the object, which should be sampled on the surface
 obj = bproc.loader.load_obj(args.treed_obj_path)
 
+
 obj_size = np.max(np.max(obj[0].get_bound_box(), axis=0) - np.min(obj[0].get_bound_box(), axis=0))
 
 # for x in obj:
@@ -69,10 +70,18 @@ obj_size = np.max(np.max(obj[0].get_bound_box(), axis=0) - np.min(obj[0].get_bou
 
 surface = bproc.object.slice_faces_with_normals(obj[0])
 
-print(surface.get_bound_box_volume())
-print(obj[0].get_bound_box())
-print(surface.get_bound_box())
-print(calculate_area_of_surface(surface))
+surface2 = bproc.object.extract_floor([obj[0]], compare_height=0.1)
+
+surface.set_location(surface.get_location() + [0, 0, 0.2])
+
+surface2[0].set_location(surface2[0].get_location() + [0, 0, -0.2])
+
+print(surface2)
+
+# print(surface.get_bound_box_volume())
+# print(obj[0].get_bound_box())
+# print(surface.get_bound_box())
+# print(calculate_area_of_surface(surface))
 
 min = np.max(np.linalg.norm(  obj[1].get_bound_box(), axis=0 ) )
 
@@ -87,12 +96,15 @@ for point in obj[1].get_bound_box():
     
 
 obj[1].set_origin( min_point )
-obj[1].set_rotation_euler(obj[1].get_rotation() - [0, np.pi/3, 0]) # from 0 to pi/2.5
+obj[1].set_rotation_euler(obj[1].get_rotation() - [0, 0*np.pi/3, 0]) # from 0 to pi/2.5
 
 
 
 locations = [
-    [5.8, -1.0, 0.0],
+    [1.8, -0.5, 1.0],
+    [1.8, -0.5,-1.0],
+    [1.8, -0.5, 0.0],
+    [1.0, 0.0, 0.0],
     [1.0, -1.0, 0.0],
     [0.0, -1.0, 0.0]
 ]

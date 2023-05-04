@@ -13,7 +13,8 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
                             sample_pose_func: Callable[[MeshObject], None], max_tries: int = 100,
                             min_distance: float = 0.25, max_distance: float = 0.6,
                             up_direction: Optional[np.ndarray] = None,
-                            check_all_bb_corners_over_surface: bool = True) -> List[MeshObject]:
+                            check_all_bb_corners_over_surface: bool = True,
+                            objects_to_check: List[MeshObject] = []) -> List[MeshObject]:
     """ Samples objects poses on a surface.
 
     The objects are positioned slightly above the surface due to the non-axis aligned nature of used bounding boxes
@@ -31,6 +32,7 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
     :param up_direction: Normal vector of the side of surface the objects should be placed on.
     :param check_all_bb_corners_over_surface: If this is True all bounding box corners have to be above the surface,
                                               else only the center of the object has to be above the surface
+    :param objects_to_check: List of other external objects with which would be needed to check collisions. 
     :return: The list of placed objects.
     """
     if up_direction is None:
@@ -56,7 +58,7 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
             if obj.get_name() in bvh_cache:
                 del bvh_cache[obj.get_name()]
 
-            if not CollisionUtility.check_intersections(obj, bvh_cache, placed_objects, []):
+            if not CollisionUtility.check_intersections(obj, bvh_cache, placed_objects + objects_to_check, []):
                 print("Collision detected, retrying!")
                 continue
 
@@ -73,11 +75,11 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
                 print("Not above surface after drop, retrying!")
                 continue
 
-            if not _OnSurfaceSampler.check_spacing(obj, placed_objects, min_distance, max_distance):
+            if not _OnSurfaceSampler.check_spacing(obj, placed_objects + objects_to_check, min_distance, max_distance):
                 print("Bad spacing after drop, retrying!")
                 continue
 
-            if not CollisionUtility.check_intersections(obj, bvh_cache, placed_objects, []):
+            if not CollisionUtility.check_intersections(obj, bvh_cache, placed_objects + objects_to_check, []):
                 print("Collision detected after drop, retrying!")
                 continue
 
@@ -149,4 +151,4 @@ class _OnSurfaceSampler:
         obj_bounds = obj.get_bound_box()
         obj_height = min(up_direction.dot(corner) for corner in obj_bounds)
 
-        obj.set_location(obj.get_location() - up_direction * (obj_height - surface_height))
+        obj.set_location(obj.get_location() - up_direction * (obj_height - surface_height) + 0.01)
