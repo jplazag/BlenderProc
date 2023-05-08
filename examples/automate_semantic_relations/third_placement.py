@@ -7,6 +7,7 @@ from typing import Dict
 import mathutils
 from matplotlib import pyplot as plt
 import h5py
+import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument("front", help="Path to the 3D front file")
@@ -40,7 +41,7 @@ bvh_cache : Dict[str, mathutils.bvhtree.BVHTree] = {}
 
 
 
-def place_object(obj_to_place: bproc.types.MeshObject, receiving_obj: bproc.types.MeshObject, 
+def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.MeshObject, 
                  bvh_cache: Dict[str, mathutils.bvhtree.BVHTree], room_objs: list[bproc.types.MeshObject], 
                  dropped_objects: list[bproc.types.MeshObject], receiving_obj_attributes):
 
@@ -49,32 +50,48 @@ def place_object(obj_to_place: bproc.types.MeshObject, receiving_obj: bproc.type
      the surface """
     
 
-    was_putted_on = False
-    was_putted_inside = False
+    
 
-    if receiving_obj_attributes["tags"][0] and not receiving_obj_attributes["tags"][1]: #np.random.randint(0, 2) == 1: #(len(receiving_obj_attributes["tags"])):
-        surface_obj = bproc.object.slice_faces_with_normals(receiving_obj)
-        was_putted_on = True
+    # print("**********************************************************************************************")
+    # print(receiving_obj_attributes["tags"][1])
+    # print(receiving_obj.get_name())
 
-    elif receiving_obj_attributes["tags"][1]: #and np.random.randint(0, 2) == 1:
-        with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
-            height = np.min(receiving_obj.get_bound_box()[:,2])
-            f.write( f"[ {height}]")#, {height}, {height + 0.15}, {height + 0.2}, {height + 0.3}, {height + 0.5}
-        f.close()
-        
-        surface_obj = bproc.object.extract_floor([receiving_obj], 
-                                                 height_list_path="examples/automate_semantic_relations/heights.txt",
-                                                 compare_height=0.03)[0]
-        was_putted_inside = True
-    else:
-        return None, None
-    if surface_obj is None:
-        return None, None
+    print("####################################################################")
+
+    print(receiving_obj_attributes["tags"])
+
+    # possible_relations =  [element for element in range(len(receiving_obj_attributes["tags"])) if receiving_obj_attributes["tags"][element] != False]
+
+    # print(possible_relations)
+
+    # relation_to_establish = np.random.choice(possible_relations) # 0 = ON; 1 = INSIDE
+    
+    # if np.random.uniform(0,1) >= 0.5:
+    #     if relation_to_establish == 0:
+    #         surface_obj = bproc.object.slice_faces_with_normals(receiving_obj)
+    #         was_putted_on = True
+
+    #     if relation_to_establish == 1:
+            
+    #         with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
+    #             height = np.min(receiving_obj.get_bound_box()[:,2])
+    #             f.write( f"[ {height}]")#, {height}, {height + 0.15}, {height + 0.2}, {height + 0.3}, {height + 0.5}
+    #         f.close()
+            
+    #         surface_obj = bproc.object.extract_floor([receiving_obj], 
+    #                                                 height_list_path="examples/automate_semantic_relations/heights.txt",
+    #                                                 compare_height=0.03)[0]
+    #         was_putted_inside = True
+    # else:
+    #     return None, None
+    
+    # if surface_obj is None:
+    #     return None, None
 
     surface_height_z = np.max(surface_obj.get_bound_box(), axis=0)[2]
 
     def sample_pose(obj2: bproc.types.MeshObject):
-        # Sample the spheres location above the surface
+        # Sample the objects location above the surface
         obj2.set_location(bproc.sampler.upper_region(
             objects_to_sample_on=[surface_obj],
             min_height=0.3,
@@ -88,76 +105,78 @@ def place_object(obj_to_place: bproc.types.MeshObject, receiving_obj: bproc.type
 
     objects_to_check = room_objs + dropped_objects
 
-    for counter1, obj_to_check in enumerate(room_objs):
-        print(counter1, obj_to_check.get_name())
 
-    for counter2, obj_to_check in enumerate(dropped_objects):
-        print(counter2, obj_to_check.get_name())
+    # while tries < 10:
 
-    while tries < 10:
+    # if obj_to_place[0].get_name() in bvh_cache:
+    #     del bvh_cache[obj_to_place[0].get_name()]
 
-        if obj_to_place[0].get_name() in bvh_cache:
-            del bvh_cache[obj_to_place[0].get_name()]
+    
+    # Sampling of the object
+    old_stdout = sys.stdout # backup current stdout
+    sys.stdout = open(os.devnull, "w")
 
-        
 
-        # Sampling of the object
-        dropped_object_list_temp = bproc.object.sample_poses_on_surface(obj_to_place, surface_obj, sample_pose,
-                                                                        min_distance=0.1, max_distance=10,
-                                                                        check_all_bb_corners_over_surface=True,
-                                                                        objects_to_check=objects_to_check )
-        # If the object couldn't be placed, jump to the next step
+    dropped_object_list_temp = bproc.object.sample_poses_on_surface(obj_to_place, surface_obj, sample_pose,
+                                                                    min_distance=0.1, max_distance=10,
+                                                                    check_all_bb_corners_over_surface=True,
+                                                                    objects_to_check=objects_to_check )
 
-        print("########## ¿Es aquí????? 1")
+    sys.stdout = old_stdout # reset old stdout
 
-        if dropped_object_list_temp :
 
-            # Check if the sampling object has a collision with another object in the room
-            # if CollisionUtility.check_intersections(obj_to_place[0], bvh_cache, room_objs + dropped_objects, []):
-            #     break
-            # else:
-            #     print("Collision detected, retrying!!!!!!!!!!!!!!!!!!")
-            algo = 1
-        else:
-            # join surface objects again
-            receiving_obj.join_with_other_objects([surface_obj])
-            surface_obj.delete()
-            print("Object couldn't be placed")
-            return None, None
-        
-        tries += 1
+    # If the object couldn't be placed, jump to the next step
 
-        print("########## ¿Es aquí????? 2")
+    print("########## ¿Es aquí????? 1")
+
+    if not dropped_object_list_temp :
+
+        # # join surface objects again
+        # receiving_obj.join_with_other_objects([surface_obj])
+        # ! Blender crash
+        # surface_obj.delete()
+        print("Object couldn't be placed")
+        return None, None
+    
+    # tries += 1
+
+    print("########## ¿Es aquí????? 2")
+
+    # ! KeyError: 'bpy_prop_collection[key]: key "Floor" not found'
+
     # Enable physics for objects of interest (active) and the surface (passive)
     # If the object already has the rigid body features enabled, disable those and set the desired behavior
     
-    # if dropped_object_list_temp[0].has_rigidbody_enabled():
-    #     dropped_object_list_temp[0].disable_rigidbody()
-    #     dropped_object_list_temp[0].enable_rigidbody(True)
-    # else:
-    #     dropped_object_list_temp[0].enable_rigidbody(True)
+    """ if dropped_object_list_temp[0].has_rigidbody_enabled():
+        dropped_object_list_temp[0].disable_rigidbody()
+        dropped_object_list_temp[0].enable_rigidbody(True)
+    else:
+        dropped_object_list_temp[0].enable_rigidbody(True)
 
-    # if receiving_obj.has_rigidbody_enabled():
-    #     receiving_obj.disable_rigidbody()
-    #     receiving_obj.enable_rigidbody(False, collision_shape='MESH')
-    # else:
-    #     receiving_obj.enable_rigidbody(False, collision_shape='MESH')
+    if receiving_obj.has_rigidbody_enabled():
+        receiving_obj.disable_rigidbody()
+        receiving_obj.enable_rigidbody(False, collision_shape='MESH')
+    else:
+        receiving_obj.enable_rigidbody(False, collision_shape='MESH')
 
-    # if surface_obj.has_rigidbody_enabled():
-    #     surface_obj.disable_rigidbody()
-    #     surface_obj.enable_rigidbody(False)
-    # else:
-    #     surface_obj.enable_rigidbody(False)
-
+    if surface_obj.has_rigidbody_enabled():
+        surface_obj.disable_rigidbody()
+        surface_obj.enable_rigidbody(False)
+    else:
+        surface_obj.enable_rigidbody(False)
 
 
     # Run the physics simulation
-    # bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=2, max_simulation_time=4,
-    #                                                     check_object_interval=1)
+    bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=2, max_simulation_time=4,
+                                                        check_object_interval=1) """
 
-    # join surface objects again
-    receiving_obj.join_with_other_objects([surface_obj])
-    surface_obj.delete()
+    # # join surface objects again
+    # receiving_obj.join_with_other_objects([surface_obj])
+    print("########## ¿Es aquí????? 2.3")
+    # ! Blender crash
+    # surface_obj.delete()
+
+    print("########## ¿Es aquí????? 2.6")
 
     # get the minimum value of all eight corners and from that the Z value
     min_coord_z = np.min(dropped_object_list_temp[0].get_bound_box(local_coords=False), axis=0)[2]
@@ -181,13 +200,9 @@ def place_object(obj_to_place: bproc.types.MeshObject, receiving_obj: bproc.type
     
     # Store the generated relations between the two objects
 
-    print("########## ¿Es aquí????? 4")
-    if was_putted_on:
-        relation = f"ON {receiving_obj.get_name()}"
-    elif was_putted_inside:
-        relation = f"INSIDE {receiving_obj.get_name()}"
     
-    return relation, dropped_object_list_temp
+    
+    return dropped_object_list_temp
 
 
 def door_sampling(base: bproc.types.MeshObject, door: bproc.types.MeshObject, objects_boxes):
@@ -203,7 +218,7 @@ def door_sampling(base: bproc.types.MeshObject, door: bproc.types.MeshObject, ob
 
     base.join_with_other_objects([door])
     
-    
+
 
 def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, child_attributes: Dict, objects_boxes, 
                       dropped_object_list: list, category_counter, bvh_cache, room_objs, relations_and_attributes, abort_next_placement = False):
@@ -213,7 +228,15 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
     parent_attributes:     Dictionary with the attributes of the surface 
         """
     
+    was_putted_on = False
+    was_putted_inside = False
+
     for ii in range(10): #range(np.random.randint(1, 6)):
+
+        print("--------------------------------------------------------------")
+        print(ii)
+        print(parent.get_name())
+        print(parent_attributes["tags"])
         # Load the object, which should be sampled on the surface
         child_attributes = objects_of_interest[np.random.randint(0, len(objects_of_interest))]
         sampling_obj = bproc.loader.load_obj(child_attributes["path"])
@@ -224,22 +247,57 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
 
             sampling_obj = [sampling_obj[0]]
 
+        print(sampling_obj[0].get_name())
+        print(abort_next_placement)
 
         # Uniform probability calculated with the tags that are true, if several relations are posible, each one have the same probability
         # as the others
         if np.sum(parent_attributes["tags"]) >= 1:# and np.random.randint(1, np.sum(parent_attributes["tags"]) + 1) == 1:
-            print(sampling_obj[0].get_name() + " _________________________________")
-            relation, dropped_object = place_object(sampling_obj, parent, bvh_cache, room_objs, dropped_object_list, parent_attributes)
 
-            if not dropped_object:
-                print("222222222222222222222222222222222222222")
-                abort_next_placement = True
+            possible_relations =  [element for element in range(len(parent_attributes["tags"])) if parent_attributes["tags"][element] != False]
+
+            print(possible_relations)
+
+            relation_to_establish = np.random.choice(possible_relations) # 0 = ON; 1 = INSIDE
+            
+            if np.random.uniform(0,1) >= 0.5:
+                if relation_to_establish == 0:
+                    surface_obj = bproc.object.slice_faces_with_normals(parent)
+                    was_putted_on = True
+
+                if relation_to_establish == 1:
+                    
+                    with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
+                        height = np.min(parent.get_bound_box()[:,2])
+                        f.write( f"[ {height}]")#, {height}, {height + 0.15}, {height + 0.2}, {height + 0.3}, {height + 0.5}
+                    f.close()
+                    
+                    surface_obj = bproc.object.extract_floor([parent], 
+                                                            height_list_path="examples/automate_semantic_relations/heights.txt",
+                                                            compare_height=0.03)[0]
+                    was_putted_inside = True
+            else:
+                continue
+            
+            if surface_obj is None:
+                continue
+
+
+            dropped_object = place_object(sampling_obj, surface_obj, bvh_cache, room_objs, dropped_object_list, parent_attributes)
+
+            # join surface objects again
+            parent.join_with_other_objects([surface_obj])
+
+            if not dropped_object[0]:
                 continue
 
         else:
-            print("333333333333333333333333333333333333333")
-            abort_next_placement = True
-            return category_counter, abort_next_placement
+            return category_counter
+        
+        if was_putted_on:
+            relation = f"ON {parent.get_name()}"
+        elif was_putted_inside:
+            relation = f"INSIDE {parent.get_name()}"
         
         # Set the custom property in the remaining objects of interest
         dropped_object[0].set_cp("category_id", category_counter + 1)
@@ -248,20 +306,19 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
         # Store the type of relation of the dropped object
         relations_and_attributes["relation"].append(relation)
         # If the object has a special characteristic that needs to be described (microwave open)
-        relations_and_attributes["attribute"].append(child_attributes["components"] != False)
+        relations_and_attributes["attribute"].append(float(child_attributes["components"] != False))
 
         # Store the bounding boxes of the objects to calculate their size and location later
         objects_boxes.extend(dropped_object[0].get_bound_box())
 
-        if not abort_next_placement:
+        # if not abort_next_placement:
 
-            next_child = objects_of_interest[np.random.randint(1, len(objects_of_interest))]
+        next_child = objects_of_interest[np.random.randint(1, len(objects_of_interest))]
 
-            category_counter, abort_next_placement = adding_new_object(sampling_obj[0], child_attributes, next_child, objects_boxes, 
-                                                                            dropped_object_list, category_counter, bvh_cache, room_objs,
-                                                                            relations_and_attributes) 
-                 
-            print("44444444444444444444444444444444444444")
+        category_counter = adding_new_object(sampling_obj[0], child_attributes, next_child, objects_boxes, dropped_object_list, 
+                                             category_counter, bvh_cache, room_objs, relations_and_attributes) 
+
+        
 
         # if child_attributes["components"] == "door":
 
@@ -276,9 +333,48 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
 
         
     
-    return  category_counter, abort_next_placement
+    return  category_counter
 
+def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], relations_and_features: Dict, camera_counter: int, scene_number: int,
+                      relations_number: int = 2 ):
+    objects_number = len(scene_objects)
+    relations = np.zeros(shape=(relations_number, objects_number, objects_number))
+    
+    for r_n in range(relations_number):
+        np.fill_diagonal(relations[r_n,:,:], -1)
 
+    objects = [scene_object.get_name().encode('utf-8') for scene_object in scene_objects]
+
+    print(objects)
+
+    
+    for counter, scene_object in enumerate(scene_objects):
+
+        current_relation = relations_and_features["relation"][counter].split()
+
+        # Since "NONE" relations does not have a related object, it is not required to search for that object's name
+
+        if current_relation[0] != "NONE":
+            parent_index = objects.index(" ".join(current_relation[1:]).encode('utf-8'))
+            child_index = objects.index(scene_object.get_name().encode('utf-8'))
+
+            if current_relation[0] == "ON":
+                
+                relations[0, child_index, parent_index] = 1
+            elif current_relation[0] == "INSIDE":
+                
+                relations[1, child_index, parent_index] = 1
+
+    for rendered_image in range(camera_counter):
+        h5_file.create_group(str(2 * scene_number + rendered_image))
+        h5_file[str(2 * scene_number + rendered_image)].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
+        h5_file[str(2 * scene_number + rendered_image)].create_dataset('bboxes', (objects_number, 4))
+
+        h5_file[str(2 * scene_number + rendered_image)].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
+
+        h5_file[str(2 * scene_number + rendered_image)].create_dataset('objects', (objects_number,), data=np.array(objects))
+
+        h5_file[str(2 * scene_number + rendered_image)].create_dataset('relations', data=np.array(relations))
 
 
 # define the camera intrinsics
@@ -320,9 +416,19 @@ store_relations_and_features = {"relation": [], "attribute": []}
 
 object_of_interest_counter = 0
 
-annotations = h5py.File(os.path.join(args.treed_obj_path,"val.h5"), 'w')
+annotations = h5py.File(os.path.join(args.output_dir,"val.h5"), 'a')
 
-for scene_number, obj in enumerate(sample_surface_objects):
+
+if list(annotations.keys()):
+
+    next_scene = int(list(annotations.keys())[-1]) + 1
+
+else:
+    next_scene = 0
+
+for  obj in sample_surface_objects:
+
+    
     # The loop starts with and UndoAfterExecution in order to clean up the cam poses from the previous iteration and
     # also remove the dropped objects and restore the sliced up objects.
     
@@ -335,13 +441,24 @@ for scene_number, obj in enumerate(sample_surface_objects):
 
         #     object_of_interest_counter, _ = adding_new_object(obj, {"tags": [True, False]}, ooi, objects_boxes, dropped_object_list, 
         #                                                         object_of_interest_counter, bvh_cache, room_objs)
-        object_of_interest_counter, _ = adding_new_object(obj, {"tags": [True, False]}, objects_of_interest, objects_boxes, dropped_object_list, 
-                                                                object_of_interest_counter, bvh_cache, room_objs, store_relations_and_features)
+        object_of_interest_counter = adding_new_object(obj, {"tags": [True, False]}, objects_of_interest, objects_boxes, dropped_object_list, 
+                                                        object_of_interest_counter, bvh_cache, room_objs, store_relations_and_features)
         
 
         if not dropped_object_list:
             continue
         
+
+        
+
+        # Set the custom property in the the base object (the table or desk)
+        obj.set_cp("category_id", object_of_interest_counter + 1)
+        object_of_interest_counter += 1
+        dropped_object_list.append(obj)
+        # Store the type of relation of the dropped object
+        store_relations_and_features["relation"].append("NONE")
+        # If the object has a special characteristic that needs to be described (microwave open)
+        store_relations_and_features["attribute"].append(float(0.0))
 
         # place a camera
 
@@ -387,15 +504,8 @@ for scene_number, obj in enumerate(sample_surface_objects):
         if cam_counter == 0:
             raise Exception("No valid camera pose found!")
 
+
         
-        # Set the custom property in the the base object (the table or desk)
-        obj.set_cp("category_id", object_of_interest_counter + 1)
-        object_of_interest_counter += 1
-        dropped_object_list.append(obj)
-        # Store the type of relation of the dropped object
-        store_relations_and_features["relation"].append("NONE")
-        # If the object has a special characteristic that needs to be described (microwave open)
-        store_relations_and_features["attribute"].append(False)
 
 
 
@@ -413,52 +523,13 @@ for scene_number, obj in enumerate(sample_surface_objects):
         
         bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
 
-
-
+        write_annotations(annotations, dropped_object_list, store_relations_and_features, cam_counter, next_scene)
         
-
-
-        objects_number = len(dropped_object_list)
-        relations_number = 2
-
-        attributes = []
-        relations = np.array(relations_number * [-1 * np.eye(objects_number)])
-
-        objects = [scene_object.get_name().encode('utf-8') for scene_object in dropped_object_list]
-
-        print(objects)
-
-        for counter, scene_object in enumerate(dropped_object_list):
-
-            current_relation = store_relations_and_features["relation"][counter].split()
-
-            if current_relation[0] != "NONE":
-                parent_index = objects.index(" ".join(current_relation[1:]).encode('utf-8'))
-                child_index = objects.index(scene_object.get_name().encode('utf-8'))
-
-            elif current_relation[0] == "ON":
-                
-                relations[0, child_index, parent_index] = 1
-            elif current_relation[0] == "INSIDE":
-                
-                relations[1, child_index, parent_index] = 1
-
-
-        annotations.create_group(str(scene_number))
-        annotations[str(scene_number)].create_dataset('attributes', data=store_relations_and_features["attribute"])
-        annotations[str(scene_number)].create_dataset('bboxes', (objects_number, 4))
-
-        annotations[str(scene_number)].create_dataset('image', data=np.array(data['colors'])) 
-
-        annotations[str(scene_number)].create_dataset('objects', (objects_number,), data=np.array(objects))
-
-        annotations[str(scene_number)].create_dataset('relations', data=np.array(relations))
-
+        next_scene += 1
         # plt.imshow(data['colors'][1], interpolation='nearest')
         # plt.show()
         # plt.savefig("mygraph.png")
-
+annotations.close()
         
-    # break
 
 
