@@ -68,11 +68,11 @@ relations = np.array(number_relations * [-1*np.eye(number_elements)])
 print(relations) """
 
 
-d = h5py.File('examples/automate_semantic_relations/Test_07/output/val.h5', 'r')
+d = h5py.File('examples/automate_semantic_relations/Test_08/output/val.h5', 'r')
 
 print(d.keys)
 
-groups = list(d.keys())
+groups = list(d["/"].keys())
 
 for i in range(int(groups[0]),int(groups[-1]) + 1):
 

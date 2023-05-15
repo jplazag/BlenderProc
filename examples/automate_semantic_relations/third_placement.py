@@ -46,47 +46,8 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
                  dropped_objects: list[bproc.types.MeshObject], receiving_obj_attributes):
 
     """ Function to place an object on other, considering that the base or receiving object could have 
-     prestablished objects on it. This function places the object and tests if it is close enough to
+     preestablished objects on it. This function places the object and tests if it is close enough to
      the surface """
-    
-
-    
-
-    # print("**********************************************************************************************")
-    # print(receiving_obj_attributes["tags"][1])
-    # print(receiving_obj.get_name())
-
-    print("####################################################################")
-
-    print(receiving_obj_attributes["tags"])
-
-    # possible_relations =  [element for element in range(len(receiving_obj_attributes["tags"])) if receiving_obj_attributes["tags"][element] != False]
-
-    # print(possible_relations)
-
-    # relation_to_establish = np.random.choice(possible_relations) # 0 = ON; 1 = INSIDE
-    
-    # if np.random.uniform(0,1) >= 0.5:
-    #     if relation_to_establish == 0:
-    #         surface_obj = bproc.object.slice_faces_with_normals(receiving_obj)
-    #         was_putted_on = True
-
-    #     if relation_to_establish == 1:
-            
-    #         with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
-    #             height = np.min(receiving_obj.get_bound_box()[:,2])
-    #             f.write( f"[ {height}]")#, {height}, {height + 0.15}, {height + 0.2}, {height + 0.3}, {height + 0.5}
-    #         f.close()
-            
-    #         surface_obj = bproc.object.extract_floor([receiving_obj], 
-    #                                                 height_list_path="examples/automate_semantic_relations/heights.txt",
-    #                                                 compare_height=0.03)[0]
-    #         was_putted_inside = True
-    # else:
-    #     return None, None
-    
-    # if surface_obj is None:
-    #     return None, None
 
     surface_height_z = np.max(surface_obj.get_bound_box(), axis=0)[2]
 
@@ -104,13 +65,6 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
     tries = 0
 
     objects_to_check = room_objs + dropped_objects
-
-
-    # while tries < 10:
-
-    # if obj_to_place[0].get_name() in bvh_cache:
-    #     del bvh_cache[obj_to_place[0].get_name()]
-
     
     # Sampling of the object
     old_stdout = sys.stdout # backup current stdout
@@ -118,23 +72,16 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
 
 
     dropped_object_list_temp = bproc.object.sample_poses_on_surface(obj_to_place, surface_obj, sample_pose,
-                                                                    min_distance=0.1, max_distance=10,
+                                                                    max_tries = 1000, min_distance=0.1, max_distance=10,
                                                                     check_all_bb_corners_over_surface=True,
                                                                     objects_to_check=objects_to_check )
 
     sys.stdout = old_stdout # reset old stdout
 
 
-    # If the object couldn't be placed, jump to the next step
-
-    print("########## ¿Es aquí????? 1")
 
     if not dropped_object_list_temp :
-
-        # # join surface objects again
-        # receiving_obj.join_with_other_objects([surface_obj])
-        # ! Blender crash
-        # surface_obj.delete()
+        
         print("Object couldn't be placed")
         return None, None
     
@@ -170,13 +117,6 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
     bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=2, max_simulation_time=4,
                                                         check_object_interval=1) """
 
-    # # join surface objects again
-    # receiving_obj.join_with_other_objects([surface_obj])
-    print("########## ¿Es aquí????? 2.3")
-    # ! Blender crash
-    # surface_obj.delete()
-
-    print("########## ¿Es aquí????? 2.6")
 
     # get the minimum value of all eight corners and from that the Z value
     min_coord_z = np.min(dropped_object_list_temp[0].get_bound_box(local_coords=False), axis=0)[2]
@@ -184,7 +124,6 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
 
     # Check if object is on surface, otherwise delete object
 
-    print("########## ¿Es aquí????? 3")
         
     print(f"Object: {dropped_object_list_temp[0].get_name()} has a diff of: {abs(min_coord_z - surface_height_z)}m to the surface")
     # if distance is smaller than 5 cm delete for wrong positioning
@@ -198,30 +137,52 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
         # skip if no object is left
         return None, None
     
-    # Store the generated relations between the two objects
+    
 
     
     
     return dropped_object_list_temp
 
 
-def door_sampling(base: bproc.types.MeshObject, door: bproc.types.MeshObject, objects_boxes):
+def door_sampling(base: bproc.types.MeshObject, door: bproc.types.MeshObject, room_objs: list[bproc.types.MeshObject], placed_objects: list[bproc.types.MeshObject]):
 
     door.set_location( base.get_origin() )
 
     for i in range(100):
         door.set_rotation_euler(base.get_rotation() + [0, 0, np.random.uniform(0, np.pi/2.6)]) # from 0 to pi/2.5
-        if CollisionUtility.check_intersections(door, bvh_cache, room_objs, []):
+        if CollisionUtility.check_intersections(door, bvh_cache, room_objs + placed_objects, []):
             break
         else:
             door.set_rotation_euler(base.get_rotation() + [0, 0, np.pi/2])
+    
+    
 
     base.join_with_other_objects([door])
     
+def generate_glass_like_material(object: bproc.types.MeshObject):
+
+    for material in object.get_materials():
+        if "MTL1" in material.get_name():
+            material.blender_obj.blend_method = "HASHED"
+            material.new_node("ShaderNodeMixShader")
+            
+
+            material.insert_node_instead_existing_link(source_socket=material.blender_obj.node_tree.nodes['Principled BSDF'].outputs["BSDF"],
+                                                       new_node_dest_socket=material.nodes['Mix Shader'].inputs[1],
+                                                       new_node_src_socket=material.nodes['Mix Shader'].outputs["Shader"],
+                                                       dest_socket=material.blender_obj.node_tree.nodes['Material Output'].inputs["Surface"])
+            
+            material.new_node("ShaderNodeBsdfTransparent")
+            material.link(material.nodes['Transparent BSDF'].outputs["BSDF"], material.blender_obj.node_tree.nodes['Mix Shader'].inputs[2])
+
+            material.blender_obj.node_tree.nodes['Principled BSDF'].inputs["Roughness"].default_value = 0.0
+            material.blender_obj.node_tree.nodes['Principled BSDF'].inputs["Transmission"].default_value = 0.0
+            material.blender_obj.use_nodes = True
+            material.update_blender_ref(material.get_name())
 
 
-def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, child_attributes: Dict, objects_boxes, 
-                      dropped_object_list: list, category_counter, bvh_cache, room_objs, relations_and_attributes, abort_next_placement = False):
+def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, children_attributes: Dict, objects_boxes, 
+                      dropped_object_list: list, category_counter, bvh_cache, room_objs, relations_and_attributes):
     """ 
     parent: 
     child_attributes:           Dictionary with the objects attributes
@@ -231,109 +192,125 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
     was_putted_on = False
     was_putted_inside = False
 
-    for ii in range(10): #range(np.random.randint(1, 6)):
-
-        print("--------------------------------------------------------------")
-        print(ii)
-        print(parent.get_name())
-        print(parent_attributes["tags"])
-        # Load the object, which should be sampled on the surface
-        child_attributes = objects_of_interest[np.random.randint(0, len(objects_of_interest))]
-        sampling_obj = bproc.loader.load_obj(child_attributes["path"])
-
-        if child_attributes["components"]:
-
-            component = sampling_obj[1] # Maybe the name should be changed
-
-            sampling_obj = [sampling_obj[0]]
-
-        print(sampling_obj[0].get_name())
-        print(abort_next_placement)
-
-        # Uniform probability calculated with the tags that are true, if several relations are posible, each one have the same probability
-        # as the others
-        if np.sum(parent_attributes["tags"]) >= 1:# and np.random.randint(1, np.sum(parent_attributes["tags"]) + 1) == 1:
-
-            possible_relations =  [element for element in range(len(parent_attributes["tags"])) if parent_attributes["tags"][element] != False]
-
-            print(possible_relations)
-
-            relation_to_establish = np.random.choice(possible_relations) # 0 = ON; 1 = INSIDE
+    # Probability  of starting the placement process when the parent object can host at least one possible relation
+    if np.sum(parent_attributes["tags"]) >= 1: 
             
-            if np.random.uniform(0,1) >= 0.5:
-                if relation_to_establish == 0:
-                    surface_obj = bproc.object.slice_faces_with_normals(parent)
+        if np.random.uniform(0,1) <= 0.7:
+            # Array with al the types of relations that the parent object could host
+            possible_relations =  [element for element in range(len(parent_attributes["tags"])) if parent_attributes["tags"][element] != False]
+            # Select randomly one of those relations
+            relations_to_establish = np.random.choice(possible_relations, np.random.randint(1, len(possible_relations) + 1), replace=False) # 0 = ON; 1 = INSIDE
+            
+
+            for relation_to_establish in relations_to_establish:
+            
+                if relation_to_establish == 0: # If == 0 take the upper surface of the parent; ON relation
+                    surface_obj = bproc.object.slice_faces_with_normals(parent) 
                     was_putted_on = True
 
-                if relation_to_establish == 1:
+                if relation_to_establish == 1: # If == 1 take the inner surface of the parent; INSIDE relation
                     
                     with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
                         height = np.min(parent.get_bound_box()[:,2])
-                        f.write( f"[ {height}]")#, {height}, {height + 0.15}, {height + 0.2}, {height + 0.3}, {height + 0.5}
+                        f.write( f"[ {height}]")
                     f.close()
+
+                    
                     
                     surface_obj = bproc.object.extract_floor([parent], 
                                                             height_list_path="examples/automate_semantic_relations/heights.txt",
                                                             compare_height=0.03)[0]
                     was_putted_inside = True
-            else:
-                continue
+
+                if surface_obj is None: # If a surface couldn't be found
+                    return category_counter
             
-            if surface_obj is None:
-                continue
-
-
-            dropped_object = place_object(sampling_obj, surface_obj, bvh_cache, room_objs, dropped_object_list, parent_attributes)
-
-            # join surface objects again
-            parent.join_with_other_objects([surface_obj])
-
-            if not dropped_object[0]:
-                continue
-
-        else:
-            return category_counter
-        
-        if was_putted_on:
-            relation = f"ON {parent.get_name()}"
-        elif was_putted_inside:
-            relation = f"INSIDE {parent.get_name()}"
-        
-        # Set the custom property in the remaining objects of interest
-        dropped_object[0].set_cp("category_id", category_counter + 1)
-        category_counter += 1
-        dropped_object_list.extend(dropped_object)
-        # Store the type of relation of the dropped object
-        relations_and_attributes["relation"].append(relation)
-        # If the object has a special characteristic that needs to be described (microwave open)
-        relations_and_attributes["attribute"].append(float(child_attributes["components"] != False))
-
-        # Store the bounding boxes of the objects to calculate their size and location later
-        objects_boxes.extend(dropped_object[0].get_bound_box())
-
-        # if not abort_next_placement:
-
-        next_child = objects_of_interest[np.random.randint(1, len(objects_of_interest))]
-
-        category_counter = adding_new_object(sampling_obj[0], child_attributes, next_child, objects_boxes, dropped_object_list, 
-                                             category_counter, bvh_cache, room_objs, relations_and_attributes) 
-
-        
-
-        # if child_attributes["components"] == "door":
-
-        #     door_sampling(sampling_obj[0], component, objects_boxes)
             
-        # # Set the custom in the remaining objects of interest
-        # dropped_object[0].set_cp("category_id", category_counter + 1)
-        # category_counter += 1
-        # dropped_object_list.extend(dropped_object)
-        # # Store the bounding boxes of the objects to calculate their size and location later
-        # objects_boxes.extend(dropped_object[0].get_bound_box())
+            
 
-        
+                # Try to place 10 objects in or on the actual parent
+                for ii in range(np.random.randint(4, 10)):
+
+                    print("--------------------------------------------------------------")
+                    print(ii)
+                    print(parent.get_name())
+                    print(parent_attributes["tags"])
+                    print(relations_to_establish)
+                    print(relation_to_establish)
+                    
+                    # Load the object, which should be sampled on the surface
+                    child_attributes = children_attributes[np.random.randint(0, len(children_attributes))]
+                    sampling_obj = bproc.loader.load_obj(child_attributes["path"])
+                    print(sampling_obj[0].get_name())
+                    
+                    if child_attributes["components"]:
+
+                        component = sampling_obj[1] # Maybe the name should be changed
+
+                        generate_glass_like_material(component)
+
+                        sampling_obj = [sampling_obj[0]]
+
+                    # If the volume of the sampling_obj is similar to the parent, it will not fit
+                    if parent.get_bound_box_volume() * 8/9 <= sampling_obj[0].get_bound_box_volume():
+                        continue
+                        
+                    dropped_object = place_object(sampling_obj, surface_obj, bvh_cache, room_objs, dropped_object_list, parent_attributes)
+
+                        
+
+                    if not dropped_object[0]: # If the sampling_obj couldn't be placed
+                        continue
+
+                    
+                    
+                    # Set the custom property in the remaining objects of interest
+                    dropped_object[0].set_cp("category_id", category_counter + 1)
+                    category_counter += 1
+                    dropped_object_list.extend(dropped_object)
+
+                    # Store the type of relation of the dropped object
+                    if was_putted_on:
+                        relation = f"ON {parent.get_name()}"
+                        was_putted_on = False
+                    elif was_putted_inside:
+                        relation = f"INSIDE {parent.get_name()}"
+                        was_putted_inside = False
+
+                    relations_and_attributes["relation"].append(relation)
+                    # If the object has a special characteristic that needs to be described (microwave open)
+                    relations_and_attributes["attribute"].append(float(child_attributes["components"] != False))
+
+                    # Store the bounding boxes of the objects to calculate their size and location later
+                    objects_boxes.extend(dropped_object[0].get_bound_box())
+
+                    # Prepare the next child to place
+                    # next_child = children_attributes[np.random.randint(0, len(children_attributes))]
+
+                    category_counter = adding_new_object(sampling_obj[0], child_attributes, children_attributes, objects_boxes, dropped_object_list, 
+                                                        category_counter, bvh_cache, room_objs, relations_and_attributes) 
+                    
+                    if child_attributes["components"] == "door":
+
+                        door_sampling(sampling_obj[0], component, room_objs, dropped_object_list)
+                        
+                    # # Set the custom in the remaining objects of interest
+                    # dropped_object[0].set_cp("category_id", category_counter + 1)
+                    # category_counter += 1
+                    # dropped_object_list.extend(dropped_object)
+                    # # Store the bounding boxes of the objects to calculate their size and location later
+                    # objects_boxes.extend(dropped_object[0].get_bound_box())
+
+                # join surface objects again
+                parent.join_with_other_objects([surface_obj])
+
+                # ! Blender crash
+                # surface_obj.delete()
+                # Join the component 
+
     
     return  category_counter
+
 
 def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], relations_and_features: Dict, camera_counter: int, scene_number: int,
                       relations_number: int = 2 ):
@@ -366,15 +343,17 @@ def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], rela
                 relations[1, child_index, parent_index] = 1
 
     for rendered_image in range(camera_counter):
-        h5_file.create_group(str(2 * scene_number + rendered_image))
-        h5_file[str(2 * scene_number + rendered_image)].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
-        h5_file[str(2 * scene_number + rendered_image)].create_dataset('bboxes', (objects_number, 4))
+        group_name = str(scene_number + rendered_image)
+        print(group_name)
+        h5_file.create_group(group_name, track_order=True)
+        h5_file[group_name].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
+        h5_file[group_name].create_dataset('bboxes', (objects_number, 4))
 
-        h5_file[str(2 * scene_number + rendered_image)].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
+        h5_file[group_name].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
 
-        h5_file[str(2 * scene_number + rendered_image)].create_dataset('objects', (objects_number,), data=np.array(objects))
+        h5_file[group_name].create_dataset('objects', (objects_number,), data=np.array(objects))
 
-        h5_file[str(2 * scene_number + rendered_image)].create_dataset('relations', data=np.array(relations))
+        h5_file[group_name].create_dataset('relations', data=np.array(relations))
 
 
 # define the camera intrinsics
@@ -394,21 +373,9 @@ for obj in room_objs:
 # tags = [on, in]
 
 objects_of_interest = [ {"name": "op_microwave",        "tags": [True,     True],       "components": "door", 
-                         "path": os.path.join(args.treed_obj_path,"op_microwave/geometry/op_microwave_open.obj")},
+                         "path": os.path.join(args.treed_obj_path,"op_microwave/geometry/op_microwave_open_glass.obj")},
                         {"name": "red_mug",             "tags": [False,    False],      "components": False,
                          "path": os.path.join(args.treed_obj_path,"red_mug/geometry/red_mug.obj")}]
-
-# objects_of_interest = [ {"name": "desk",                "tags": [True,    False],       "components": False},
-#                         {"name": "table",               "tags": [True,    False],       "components": False},
-#                         {"name": "op_microwave",        "tags": [True,     True],       "components": "door"},
-#                         {"name": "red_mug",             "tags": [False,    False],      "components": False}]
-
-
-
-# for ooi in objects_of_interest:
-
-#             # Take the path to object to be placed
-#             ooi["path"] = glob.glob(args.treed_obj_path + '/' + ooi["name"] + '/geometry/' + ooi["name"] + '*.obj')[-1]
 
 
 
@@ -416,13 +383,12 @@ store_relations_and_features = {"relation": [], "attribute": []}
 
 object_of_interest_counter = 0
 
-annotations = h5py.File(os.path.join(args.output_dir,"val.h5"), 'a')
+annotations = h5py.File(os.path.join(args.output_dir,"val.h5"), 'a',track_order=True)
 
 
 if list(annotations.keys()):
 
-    next_scene = int(list(annotations.keys())[-1]) + 1
-
+    next_scene = int(list(annotations["/"].keys())[-1]) + 1 
 else:
     next_scene = 0
 
@@ -441,6 +407,7 @@ for  obj in sample_surface_objects:
 
         #     object_of_interest_counter, _ = adding_new_object(obj, {"tags": [True, False]}, ooi, objects_boxes, dropped_object_list, 
         #                                                         object_of_interest_counter, bvh_cache, room_objs)
+        
         object_of_interest_counter = adding_new_object(obj, {"tags": [True, False]}, objects_of_interest, objects_boxes, dropped_object_list, 
                                                         object_of_interest_counter, bvh_cache, room_objs, store_relations_and_features)
         
@@ -448,7 +415,6 @@ for  obj in sample_surface_objects:
         if not dropped_object_list:
             continue
         
-
         
 
         # Set the custom property in the the base object (the table or desk)
@@ -526,9 +492,12 @@ for  obj in sample_surface_objects:
         write_annotations(annotations, dropped_object_list, store_relations_and_features, cam_counter, next_scene)
         
         next_scene += 1
-        # plt.imshow(data['colors'][1], interpolation='nearest')
-        # plt.show()
-        # plt.savefig("mygraph.png")
+
+        for obj in dropped_object_list:
+            print(obj.get_name())
+            for mat in obj.get_materials():
+                mat.blender_obj.blend_method = "HASHED"
+                print(mat.get_name())
 annotations.close()
         
 
