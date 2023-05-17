@@ -151,4 +151,4 @@ class _OnSurfaceSampler:
         obj_bounds = obj.get_bound_box()
         obj_height = min(up_direction.dot(corner) for corner in obj_bounds)
 
-        obj.set_location(obj.get_location() - up_direction * (obj_height - surface_height) + 0.0001)
+        obj.set_location(obj.get_location() - up_direction * (obj_height - surface_height) + 0.001)
