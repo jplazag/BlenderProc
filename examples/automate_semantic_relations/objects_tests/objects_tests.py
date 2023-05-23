@@ -10,33 +10,13 @@ args = parser.parse_args()
 
 
 
-def calculate_area_of_surface(surface: bproc.types.MeshObject):
-    box = surface.get_bound_box()
+def calculate_area_of_surface(object_to_measure: bproc.types.MeshObject, x_vector=np.array([1,0,0]), y_vector=np.array([0,1,0])):
 
-    z = box[0,2]
-    y = box[0,1]
-    x = box[0,0]
+    box = object_to_measure.get_bound_box()
 
-    print(box[1:,:])
-    z1 = 0
-    Y = False
-    X = False
-    print("--------------------------")
-    for point in box[1:,:]:
-        
-        if point[2] == z:
-            print(point)
-            if point[1] == y and not X:
-                x1 = point[0]
-                X = True
-            if point[0] == x and not Y:
-                y1 = point[1]
-                Y = True
-                # print(y, y1)
-        else:
-            z1 = point[2]
-    print("--------------------------")
-    return (y1 - y) * (x1 - x)*1000, (y1 - y) * (x1 - x) * (z1 - z) 
+    x_lenght = max(x_vector.dot(corner) for corner in box) - min(x_vector.dot(corner) for corner in box)
+    y_lenght = max(y_vector.dot(corner) for corner in box) - min(y_vector.dot(corner) for corner in box)
+    return x_lenght * y_lenght
 
 
 bproc.init()
@@ -70,20 +50,46 @@ obj_size = np.max(np.max(obj[0].get_bound_box(), axis=0) - np.min(obj[0].get_bou
 
 surface = bproc.object.slice_faces_with_normals(obj[0])
 
-surface2 = bproc.object.extract_floor([obj[0]], compare_height=0.1)
+surface2 = bproc.object.extract_floor([obj[0]], compare_height=0.1)[0]
 
-surface.set_location(surface.get_location() + [0, 0, 0.2])
+# surface.set_location(surface.get_location() + [0, 0, 0.2])
 
-surface2[0].set_location(surface2[0].get_location() + [0, 0, -0.2])
+# surface2[0].set_location(surface2[0].get_location() + [0, 0, -0.2])
 
-print(surface2)
+# print(surface2)
 
 # print(surface.get_bound_box_volume())
 # print(obj[0].get_bound_box())
 # print(surface.get_bound_box())
 # print(calculate_area_of_surface(surface))
 
-min = np.max(np.linalg.norm(  obj[1].get_bound_box(), axis=0 ) )
+# obj[0].join_with_other_objects([obj[1]])
+
+# obj[1].delete()
+
+# obj = [obj[0]]
+
+print(calculate_area_of_surface(surface))
+
+print(calculate_area_of_surface(surface, x_vector=np.array([1,0,0]), y_vector=np.array([0,0,1])))
+
+print(calculate_area_of_surface(surface, x_vector=np.array([0,1,0]), y_vector=np.array([0,0,1])))
+
+
+print(calculate_area_of_surface(surface2))
+
+print(calculate_area_of_surface(surface2, x_vector=np.array([1,0,0]), y_vector=np.array([0,0,1])))
+
+print(calculate_area_of_surface(surface2, x_vector=np.array([0,1,0]), y_vector=np.array([0,0,1])))
+
+
+print(calculate_area_of_surface(obj[0]))
+
+print(calculate_area_of_surface(obj[0], x_vector=np.array([1,0,0]), y_vector=np.array([0,0,1])))
+
+print(calculate_area_of_surface(obj[0], x_vector=np.array([0,1,0]), y_vector=np.array([0,0,1])))
+
+""" min = np.max(np.linalg.norm(  obj[1].get_bound_box(), axis=0 ) )
 
 
 
@@ -96,7 +102,7 @@ for point in obj[1].get_bound_box():
     
 
 obj[1].set_origin( min_point )
-obj[1].set_rotation_euler(obj[1].get_rotation() - [0, 0*np.pi/3, 0]) # from 0 to pi/2.5
+obj[1].set_rotation_euler(obj[1].get_rotation() - [0, 0*np.pi/3, 0]) # from 0 to pi/2.5 """
 
 
 

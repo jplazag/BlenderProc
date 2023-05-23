@@ -254,7 +254,7 @@ class FaceSlicer:
         :param cmp_angle: Angle, which is used to compare against the up_vec in radians.
         :param matrix_world: The matrix_world of the object, to which the face belongs
         """
-        # deselect all faces
+
         counter = 0
         for f in bm.faces:
             if FaceSlicer.check_face_with(f, matrix_world, height_value, compare_height, up_vector, cmp_angle):
