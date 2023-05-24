@@ -59,7 +59,8 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
             objects_to_sample_on=[surface_obj],
             min_height=0.01,
             max_height=1,
-            use_ray_trace_check=False
+            use_ray_trace_check=False,
+            face_sample_range=[0.1, 0.9]
         ))
         #Randomized rotation of the sampled object
         obj2.set_rotation_euler(bproc.sampler.uniformSO3(around_y=False, around_x=False, around_z=True))
@@ -149,7 +150,7 @@ def door_sampling(base: bproc.types.MeshObject, door: bproc.types.MeshObject, ro
 
     for i in range(100):
         door.set_rotation_euler(base.get_rotation() + [0, 0, np.random.uniform(0, np.pi/2.6)]) # from 0 to pi/2.5
-        if False: #CollisionUtility.check_intersections(door, bvh_cache, room_objs + placed_objects, []):
+        if CollisionUtility.check_intersections(door, bvh_cache, room_objs + placed_objects, []):
             break
         else:
             door.set_rotation_euler(base.get_rotation() + [0, 0, np.pi/2])
@@ -230,7 +231,7 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
     was_putted_on = False
     was_putted_inside = False
 
-    test = True # Variable to switch to a test environment in which one could reduce the amount of objects
+    test = False # Variable to switch to a test environment in which one could reduce the amount of objects
                  # and generate specific configuration to analyse a certain behavior
     parent_is_a_desk = False
 
@@ -257,7 +258,6 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                 relations_to_establish = np.random.choice(possible_relations, 
                                                           np.random.randint(1, len(possible_relations) + 1), 
                                                           replace=False) # 0 = ON; 1 = INSIDE
-            
 
             for relation_to_establish in relations_to_establish:
             
@@ -284,9 +284,6 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                 if surface_obj is None: # If a surface couldn't be found
                     return category_counter
             
-            
-            
-
                 # Try to place 10 objects in or on the actual parent
 
                 if parent_is_a_desk:
@@ -298,10 +295,8 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
 
                 for ii in range(np.random.randint(1, max_n_obj)):
 
-                    
-                    
                     # Load the object, which should be sampled on the surface
-                    child_attributes = children_attributes[n]#np.random.randint(0, len(children_attributes) )]
+                    child_attributes = children_attributes[np.random.randint(0, len(children_attributes) )] #n]
                     sampling_obj = bproc.loader.load_obj(child_attributes["path"])
 
                     print("--------------------------------------------------------------")
@@ -314,17 +309,10 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     if child_attributes["components"]:
 
                         component = sampling_obj[1] # Maybe the name should be changed
-
                         generate_glass_like_material(component)
-
                         sampling_obj = [sampling_obj[0]]
-
-                    
-
                     # Compare the size of the surface with the base of the bounding box from the sampling_obj
-                    
                     surface_area = calculate_area_of_surface(surface_obj)
-                    
                     sampling_obj_area = calculate_area_of_surface(sampling_obj[0], y_vector=np.array([0,0,1]))
 
                     print(f"The base of the child object is {round(sampling_obj_area, 3)} m^2")
@@ -344,11 +332,6 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                         continue
 
                     print("--------------------------------------------------------------")
-                    
-                    # Set the custom property in the remaining objects of interest
-                    dropped_object[0].set_cp("category_id", category_counter + 1)
-                    category_counter += 1
-                    dropped_object_list.extend(dropped_object)
 
                     # Store the type of relation of the dropped object
                     if was_putted_on:
@@ -356,10 +339,12 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     elif was_putted_inside:
                         parent_name = parent.get_name()
                         relation = f"INSIDE {parent_name}"
-
                         objects_to_look_for[parent_name].append(dropped_object[0])
 
-                        
+                    # Set the custom property in the remaining objects of interest
+                    dropped_object[0].set_cp("category_id", category_counter + 1)
+                    category_counter += 1
+                    dropped_object_list.extend(dropped_object)
 
 
 
@@ -478,11 +463,17 @@ def visible_objects_considering_glass(cam2world_matrix, sqrt_number_of_rays: int
             # Compute current point on plane
             end = frame[0] + vec_x * x / float(sqrt_number_of_rays - 1) + vec_y * y / float(sqrt_number_of_rays - 1)
 
-            # _, _, _, _, hit_object, _ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(),
-            #                                                         position, end - position)
+            _, _, _, face_index, hit_object, _ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(),
+                                                                    position, end - position)
+            if hit_object:
+                visible_objects_set.add(MeshObject(hit_object))
             
             # if hit_object:
-            #     visible_objects_set.add(MeshObject(hit_object))
+            #     material_index = hit_object.data.polygons[face_index].material_index
+            #     hit_material_name =  hit_object.material_slots.keys()[material_index]
+
+            #     if "MTL1" in hit_material_name and hit_material_name not in materials_hit:
+            #         print(hit_material_name)
 
             while we_are_on_glass_r and we_are_on_glass_l:
 
@@ -490,32 +481,42 @@ def visible_objects_considering_glass(cam2world_matrix, sqrt_number_of_rays: int
 
                 for direction in range(2):
                     if (we_are_on_glass_r and direction == 0) or (we_are_on_glass_l and direction == 1):
-                        end_search = end * (-1)**direction * vec_x * (10/ (2 * focal_length) ) * step
-                        _, hit_location, _, face_index, hit_object, _ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(),
+                        end_search = end + (-1)**direction * vec_x * (1/ (2 * focal_length) ) * step + (-1)**direction * vec_y * (1/ (2 *focal_length) ) * step
+                        _, hit_location, _, face_index, hit_object_search, _ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(),
                                                                             position, end_search - position)
                         # Add hit object to set
-                        if hit_object:
+                        if hit_object_search:
+
+
                             
-                            new_hit_location = hit_location + (end_search - position) / np.linalg.norm(end_search - position) * 0.02
+                            new_hit_location = hit_location + (end_search - position) / np.linalg.norm(end_search - position) * 0.06
                             # hit_object = MeshObject(hit_object)
-                            material_index = hit_object.data.polygons[face_index].material_index
+                            material_index = hit_object_search.data.polygons[face_index].material_index
                             
-                            if len(hit_object.material_slots.keys()) < 1:
+                            if len(hit_object_search.material_slots.keys()) < 1:
                                 if direction == 0:
                                     we_are_on_glass_r = False
                                 else:
                                     we_are_on_glass_l = False
                                 continue
 
-                            hit_material_name =  hit_object.material_slots.keys()[material_index]
+                            hit_material_name =  hit_object_search.material_slots.keys()[material_index]
 
                             if "MTL1" in hit_material_name and hit_material_name not in materials_hit: #! Generalize the name of the material
                                 glass_like_material_name = hit_material_name
-
-                                _, _, _, _, hit_object2, _ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(),
+                                # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+                                _, hit_location, _, face_index, hit_object2, _ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(),
                                                                                         new_hit_location, end_search - position)
                                 if hit_object2:
                                     visible_objects_set.add(MeshObject(hit_object2))
+                                    # material_index = hit_object2.data.polygons[face_index].material_index
+                            
+                                    # if len(hit_object2.material_slots.keys()) < 1:
+                                    #     continue
+
+                                    # hit_material_name =  hit_object2.material_slots.keys()[material_index]
+                                    # print("###########################3")
+                                    # print(hit_material_name)
                                 
                             else:
                                 if direction == 0:
@@ -596,13 +597,6 @@ for  obj in sample_surface_objects:
 
         if not dropped_object_list:
             continue
-        
-        
-
-        
-        print("================================================")
-        print(f"{len(dropped_object_list)} objects were placed")
-        print("================================================")
 
 
         # Set the custom property in the the base object (the table or desk)
@@ -613,6 +607,10 @@ for  obj in sample_surface_objects:
         store_relations_and_features["relation"].append("NONE")
         # If the object has a special characteristic that needs to be described (microwave open)
         store_relations_and_features["attribute"].append(float(0.0))
+
+        print("================================================")
+        print(f"{len(dropped_object_list)} objects were placed")
+        print("================================================")
 
         # Counter of the stored camera positions
         cam_counter = 0
@@ -628,16 +626,19 @@ for  obj in sample_surface_objects:
                 poi = bproc.object.compute_poi([object_to_focus])
                 
                 object_size = np.max(np.max(object_to_focus.get_bound_box(), axis=0) - np.min(object_to_focus.get_bound_box(), axis=0))
-                r_min = object_size * 2 
-                r_max = object_size * 4
+                r_min = object_size
+                r_max = object_size * 3
                 proximity_checks = {"min": r_min, "avg": {"min": r_min , "max": r_max * 2 }, "no_background": True}
-                for i in range(100):
+                for element in inside_group:
+                    print(element.get_name())
+                
+                for i in range(500):
                     #Place camera
                     camera_location = bproc.sampler.shell(center=poi, radius_min=r_min, radius_max=r_max,
                                                         elevation_min=0, elevation_max=20)
 
                     # Make sure that object is not always in the center of the camera
-                    toward_direction = (poi + np.random.uniform(0, 1, size=3) * objects_size * 0.5) - camera_location
+                    toward_direction = (poi + np.random.uniform(0, 1, size=3) * object_size * 0.5) - camera_location
 
                     # Compute rotation based on vector going from location towards poi/en/stable/strings.html
                     rotation_matrix = bproc.camera.rotation_from_forward_vec(poi - camera_location, inplane_rot=np.random.uniform(-0.7854, 0.7854))
@@ -645,17 +646,18 @@ for  obj in sample_surface_objects:
                     cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
 
                     objects_seen = visible_objects_considering_glass(cam2world_matrix, sqrt_number_of_rays=20)
-                
+                    # print(len(set(objects_seen) & set(dropped_object_list)))
+                    # print(f"   {len(set(objects_seen) & set(inside_group[1:]))}")
                     if len(inside_group) > 1:
-                        print(len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]))
-                        if len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]) > 0.7:
+                        # print(len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]))
+                        if len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]) > 0.2:
                             if bproc.camera.perform_obstacle_in_view_check(cam2world_matrix, proximity_checks, bvh_tree):
                                 bproc.camera.add_camera_pose(cam2world_matrix)
                                 cam_counter += 1
                                 print("One camera pose looking inside was stored")
                     if cam_counter > 3:
                         break
-        if cam_counter < 2:
+        if cam_counter < 6:
             # Find a point of interest in the frame to focus, mean of all the bounding boxes of the objects
             objects_location = np.mean(objects_boxes, axis=0)
             objects_size = np.max(np.max(objects_boxes, axis=0) - np.min(objects_boxes, axis=0))
