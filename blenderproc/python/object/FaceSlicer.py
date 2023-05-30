@@ -85,7 +85,7 @@ def slice_faces_with_normals(mesh_object: MeshObject, compare_angle_degrees: flo
 
 
 def extract_floor(mesh_objects: List[MeshObject], compare_angle_degrees: float = 7.5, compare_height: float = 0.15,
-                  up_vector_upwards: bool = True, height_list_path: str = None, new_name_for_object: str = "Floor",
+                  up_vector_upwards: bool = True, height_list_path: str = None, height_list = None, new_name_for_object: str = "Floor",
                   should_skip_if_object_is_already_there: bool = False) -> List[MeshObject]:
     """ Extracts floors in the following steps:
     1. Searchs for the specified object.
@@ -102,6 +102,7 @@ def extract_floor(mesh_objects: List[MeshObject], compare_angle_degrees: float =
                              automatically detected. This might fail. The height_list_values can be specified in a
                              list like fashion in the file: [0.0, 2.0]. These values are in the same size the dataset
                              is in, which is usually meters. The content must always be a list, e.g. [0.0].
+    :param height_list:      List with the previous height values
     :param new_name_for_object: Name for the newly created object, which faces fulfill the given parameters.
     :param should_skip_if_object_is_already_there: If this is true no extraction will be done, if an object is there,
                                                    which has the same name as name_for_split_obj, which would be used
@@ -113,11 +114,14 @@ def extract_floor(mesh_objects: List[MeshObject], compare_angle_degrees: float =
     if not up_vector_upwards:
         up_vec *= -1.0
 
-    height_list = []
-    if height_list_path is not None:
+    height_list_temp = []
+
+    if height_list:
+        height_list_temp = height_list
+    elif height_list_path is not None:
         height_file_path = resolve_path(height_list_path)
         with open(height_file_path, "r", encoding="utf-8") as file:
-            height_list = [float(val) for val in ast.literal_eval(file.read())]
+            height_list_temp = [float(val) for val in ast.literal_eval(file.read())]
 
     object_names = [obj.name for obj in bpy.context.scene.objects if obj.type == "MESH"]
 
@@ -146,9 +150,9 @@ def extract_floor(mesh_objects: List[MeshObject], compare_angle_degrees: float =
         bm.normal_update()
         bpy.ops.mesh.select_all(action='DESELECT')
 
-        if height_list:
+        if height_list_temp:
             counter = 0
-            for height_val in height_list:
+            for height_val in height_list_temp:
                 counter = FaceSlicer.select_at_height_value(bm, height_val, compare_height, up_vec,
                                                             np.deg2rad(compare_angle_degrees),
                                                             obj.get_local2world_mat())

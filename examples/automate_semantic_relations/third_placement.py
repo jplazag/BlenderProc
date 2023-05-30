@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 import h5py
 import sys
 from blenderproc.python.types.MeshObjectUtility import MeshObject
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument("front", help="Path to the 3D front file")
@@ -148,66 +149,34 @@ def door_sampling(base: bproc.types.MeshObject, door: bproc.types.MeshObject, ro
 
     door.set_location( base.get_origin() )
 
-    for i in range(100):
-        door.set_rotation_euler(base.get_rotation() + [0, 0, np.random.uniform(0, np.pi/2.6)]) # from 0 to pi/2.5
+    for i in range(10):
+        door
+        rotation = np.random.uniform(0, np.pi/2.6)
+        door.set_rotation_euler(base.get_rotation() + [0, 0, rotation]) # from 0 to pi/2.5
         if CollisionUtility.check_intersections(door, bvh_cache, room_objs + placed_objects, []):
-            break
-        else:
-            door.set_rotation_euler(base.get_rotation() + [0, 0, np.pi/2])
-    
-    
+            base.join_with_other_objects([door])
+            return rotation
+
+    rotation = np.pi/2
+    door.set_rotation_euler(base.get_rotation() + [0, 0, rotation])
 
     base.join_with_other_objects([door])
+    return rotation
+    
 
     
-def generate_glass_like_material(object: bproc.types.MeshObject):
 
-    """ Generate a schader in order to represent accuratly a transparent material
-     
-      object            Object with the glass like material
-        """
+    
 
-    for material in object.get_materials():
-        if "MTL1" in material.get_name():
-            # Blender method to allow the transparent objects behavior
-            material.blender_obj.blend_method = "HASHED"
-            material.new_node("ShaderNodeMixShader")
-            
-
-            material.insert_node_instead_existing_link(source_socket=material.blender_obj.node_tree.nodes['Principled BSDF'].outputs["BSDF"],
-                                                       new_node_dest_socket=material.nodes['Mix Shader'].inputs[1],
-                                                       new_node_src_socket=material.nodes['Mix Shader'].outputs["Shader"],
-                                                       dest_socket=material.blender_obj.node_tree.nodes['Material Output'].inputs["Surface"])
-            # Transparent Node
-            material.new_node("ShaderNodeBsdfTransparent")
-            material.link(material.nodes['Transparent BSDF'].outputs["BSDF"], 
-                          material.blender_obj.node_tree.nodes['Mix Shader'].inputs[2])
-            # Color Ramp node
-            material.new_node("ShaderNodeValToRGB")
-            material.nodes['ColorRamp'].color_ramp.elements[0].color = (0.654, 0.654, 0.654, 1.0)
-
-            material.link(material.nodes['ColorRamp'].outputs["Color"], 
-                          material.blender_obj.node_tree.nodes['Mix Shader'].inputs["Fac"])
-            
-            # Fresnel node to set the weight or Frac factor in the mix shader (going through Color Ramp node)
-            material.new_node("ShaderNodeFresnel")
-            material.link(material.nodes['Fresnel'].outputs["Fac"], 
-                          material.nodes['ColorRamp'].inputs["Fac"])
-            
-            material.blender_obj.node_tree.nodes['Principled BSDF'].inputs["Roughness"].default_value = 0.0
-            material.blender_obj.node_tree.nodes['Principled BSDF'].inputs["Transmission"].default_value = 1.0
-            material.blender_obj.node_tree.nodes['Principled BSDF'].inputs["Alpha"].default_value = 0.0
-            material.blender_obj.use_nodes = True
-            material.update_blender_ref(material.get_name())
 
 def calculate_area_of_surface(object_to_measure: bproc.types.MeshObject, x_vector=np.array([1,0,0]), y_vector=np.array([0,1,0])):
 
     box = object_to_measure.get_bound_box()
 
-    x_lenght = max(x_vector.dot(corner) for corner in box) - min(x_vector.dot(corner) for corner in box)
-    y_lenght = max(y_vector.dot(corner) for corner in box) - min(y_vector.dot(corner) for corner in box)
+    x_length = max(x_vector.dot(corner) for corner in box) - min(x_vector.dot(corner) for corner in box)
+    y_length = max(y_vector.dot(corner) for corner in box) - min(y_vector.dot(corner) for corner in box)
 
-    return x_lenght * y_lenght
+    return x_length * y_length
 
 
 def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, children_attributes: Dict, objects_boxes, 
@@ -267,17 +236,20 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     was_putted_on = True
 
                 elif relation_to_establish == 1: # If == 1 take the inner surface of the parent; INSIDE relation
-                    
-                    with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
-                        height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
-                        f.write( f"[ {height}]")
-                    f.close()
+                    height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
+                    # with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
+                    #     height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
+                    #     f.write( f"[ {height}]")
+                    # f.close()
                     # Variable to store all the objects placed inside, so we could check if they are visible
                     objects_to_look_for[parent.get_name()] = [parent] # Start with the parent to use it later
                                                                       # in the camera pose generation
                     print(f"The surface is going to be taken from {parent.get_name()}")
+                    # surface_obj = bproc.object.extract_floor([parent], 
+                    #                                         height_list_path="examples/automate_semantic_relations/heights.txt",
+                    #                                         compare_height=0.01, new_name_for_object="Surface")[0]
                     surface_obj = bproc.object.extract_floor([parent], 
-                                                            height_list_path="examples/automate_semantic_relations/heights.txt",
+                                                            height_list=[height],
                                                             compare_height=0.01, new_name_for_object="Surface")[0]
                     was_putted_inside = True
 
@@ -298,6 +270,7 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     # Load the object, which should be sampled on the surface
                     child_attributes = children_attributes[np.random.randint(0, len(children_attributes) )] #n]
                     sampling_obj = bproc.loader.load_obj(child_attributes["path"])
+                    actual_attribute = 0
 
                     print("--------------------------------------------------------------")
                     
@@ -309,7 +282,6 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     if child_attributes["components"]:
 
                         component = sampling_obj[1] # Maybe the name should be changed
-                        generate_glass_like_material(component)
                         sampling_obj = [sampling_obj[0]]
                     # Compare the size of the surface with the base of the bounding box from the sampling_obj
                     surface_area = calculate_area_of_surface(surface_obj)
@@ -319,6 +291,7 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     print(f"The area of the parent surface is {round(surface_area, 3)} m^2")
 
                     if surface_area <= sampling_obj_area + 0.06:
+                        sampling_obj[0].delete()
                         print("--------------------------------------------------------------")
                         continue
 
@@ -341,16 +314,7 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                         relation = f"INSIDE {parent_name}"
                         objects_to_look_for[parent_name].append(dropped_object[0])
 
-                    # Set the custom property in the remaining objects of interest
-                    dropped_object[0].set_cp("category_id", category_counter + 1)
-                    category_counter += 1
-                    dropped_object_list.extend(dropped_object)
-
-
-
-                    relations_and_attributes["relation"].append(relation)
-                    # If the object has a special characteristic that needs to be described (microwave open)
-                    relations_and_attributes["attribute"].append(float(child_attributes["components"] != False))
+                    
 
                     # Store the bounding boxes of the objects to calculate their size and location later
                     objects_boxes.extend(dropped_object[0].get_bound_box())
@@ -365,7 +329,18 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
                     
                     if child_attributes["components"] == "door":
 
-                        door_sampling(sampling_obj[0], component, room_objs, dropped_object_list)
+                        door_rotation = door_sampling(sampling_obj[0], component, room_objs, dropped_object_list )
+                        if door_rotation < np.pi/4:
+                            actual_attribute = 1.0 # The door is open
+
+                    # Set the custom property in the remaining objects of interest
+                    dropped_object[0].set_cp("category_id", category_counter + 1)
+                    category_counter += 1
+                    dropped_object_list.extend(dropped_object)
+
+                    relations_and_attributes["relation"].append(relation)
+                    # If the object has a special characteristic that needs to be described (microwave open)
+                    relations_and_attributes["attribute"].append(actual_attribute)
                 was_putted_inside = False
                 was_putted_on = False
                 # join surface objects again
@@ -379,8 +354,8 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
     return  category_counter
 
 
-def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], relations_and_features: Dict, 
-                      camera_counter: int, scene_number: int, relations_number: int = 2 ):
+def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], data, relations_and_features: Dict, 
+                      camera_counter: int, scene_number: int, bboxes: list, relations_number: int = 2 ):
     objects_number = len(scene_objects)
     relations = np.zeros(shape=(relations_number, objects_number, objects_number))
     
@@ -411,10 +386,11 @@ def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], rela
         group_name = str(scene_number + rendered_image)
         h5_file.create_group(group_name, track_order=True)
         h5_file[group_name].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
-        h5_file[group_name].create_dataset('bboxes', (objects_number, 4))
+        
+        h5_file[group_name].create_dataset('bboxes', data=np.array(bboxes[rendered_image]))
 
         h5_file[group_name].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
-
+        h5_file[group_name].create_dataset('image_seg', data=np.array(data['instance_segmaps'][rendered_image])) 
         h5_file[group_name].create_dataset('objects', (objects_number,), data=np.array(objects))
 
         h5_file[group_name].create_dataset('relations', data=np.array(relations))
@@ -617,10 +593,17 @@ for  obj in sample_surface_objects:
 
         # Init bvh tree containing all mesh objects
         bvh_tree = bproc.object.create_bvh_tree_multi_objects(bproc.object.get_all_mesh_objects())
-        
+
+        for obj in dropped_object_list:
+            print(obj.get_name())
+
+        print("******************************************************")
+        inside_objects = [] # Array to store all the objects placed inside without distinction
         if len(objects_to_search_inside.values()) > 0:
             for _, inside_group in objects_to_search_inside.items():
                 
+                inside_objects.extend(inside_group[1:])
+
                 object_to_focus = inside_group[0] # Take the parent to use it as point of interest
                  # Point of interest to shoot
                 poi = bproc.object.compute_poi([object_to_focus])
@@ -629,10 +612,8 @@ for  obj in sample_surface_objects:
                 r_min = object_size
                 r_max = object_size * 3
                 proximity_checks = {"min": r_min, "avg": {"min": r_min , "max": r_max * 2 }, "no_background": True}
-                for element in inside_group:
-                    print(element.get_name())
                 
-                for i in range(500):
+                for i in range(50):
                     #Place camera
                     camera_location = bproc.sampler.shell(center=poi, radius_min=r_min, radius_max=r_max,
                                                         elevation_min=0, elevation_max=20)
@@ -641,13 +622,12 @@ for  obj in sample_surface_objects:
                     toward_direction = (poi + np.random.uniform(0, 1, size=3) * object_size * 0.5) - camera_location
 
                     # Compute rotation based on vector going from location towards poi/en/stable/strings.html
-                    rotation_matrix = bproc.camera.rotation_from_forward_vec(poi - camera_location, inplane_rot=np.random.uniform(-0.7854, 0.7854))
+                    rotation_matrix = bproc.camera.rotation_from_forward_vec(toward_direction - camera_location, inplane_rot=np.random.uniform(-0.349, 0.349))
                     # Add homog cam pose based on location an rotation
                     cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
-
-                    objects_seen = visible_objects_considering_glass(cam2world_matrix, sqrt_number_of_rays=20)
-                    # print(len(set(objects_seen) & set(dropped_object_list)))
-                    # print(f"   {len(set(objects_seen) & set(inside_group[1:]))}")
+                    
+                    objects_seen = bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15)
+                    
                     if len(inside_group) > 1:
                         # print(len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]))
                         if len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]) > 0.2:
@@ -657,18 +637,22 @@ for  obj in sample_surface_objects:
                                 print("One camera pose looking inside was stored")
                     if cam_counter > 3:
                         break
+
+        first_cycle_cam_counter =  cam_counter
         if cam_counter < 6:
+            
+
             # Find a point of interest in the frame to focus, mean of all the bounding boxes of the objects
             objects_location = np.mean(objects_boxes, axis=0)
             objects_size = np.max(np.max(objects_boxes, axis=0) - np.min(objects_boxes, axis=0))
             radius_min = objects_size * 2
-            radius_max = objects_size * 4
+            radius_max = objects_size * 3
             proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max * 2 }, "no_background": True}
             
             for i in range(500):
                 # Place Camera
                 camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
-                                                    radius_max=radius_max, elevation_min=0, elevation_max=20)
+                                                    radius_max=radius_max, elevation_min=0, elevation_max=15)
 
                 # Make sure that object is not always in the center of the camera
                 toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.5) - camera_location
@@ -676,28 +660,43 @@ for  obj in sample_surface_objects:
                 # Compute rotation based on vector going from location towards poi/en/stable/strings.html
 
 
-                rotation_matrix = bproc.camera.rotation_from_forward_vec(objects_location - camera_location, 
-                                                                        inplane_rot=np.random.uniform(-0.7854, 0.7854))
+                rotation_matrix = bproc.camera.rotation_from_forward_vec(toward_direction - camera_location, 
+                                                                        inplane_rot=np.random.uniform(-0.349, 0.349))
                 # Add homog cam pose based on location an rotation
                 cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
+                # print(np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
+                #                     for object in dropped_object_list])/len(dropped_object_list))
 
-                if bproc.camera.perform_obstacle_in_view_check(cam2world_matrix, proximity_checks, bvh_tree) \
-                    and 0.5 <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
-                                    for object in dropped_object_list])/len(dropped_object_list):
-                # if 0.2 <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) for object in dropped_object_list])/len(dropped_object_list):
+                objects_to_check = list(set(dropped_object_list) - set(inside_objects))
+                
+
+                if 0.6 <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
+                                    for object in objects_to_check])/len(objects_to_check):
+
                     bproc.camera.add_camera_pose(cam2world_matrix)
                     cam_counter += 1
                     print("One camera pose looking all the objects in general was stored")
-                if cam_counter == 2:
+                if cam_counter >= first_cycle_cam_counter + 2:
                     break
             if cam_counter == 0:
                 raise Exception("No valid camera pose found!")
 
-        bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance"], pass_alpha_threshold= 0.1)
+        bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance"])
 
-        data = bproc.renderer.render(keys_with_alpha_channel=set(['segmap']))
+        data = bproc.renderer.render()
+
+
+        """ def numpy_encoder(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()  # Numpy-Array in Python-Liste umwandeln
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
         
+        with open("daten.json", "w") as file:
+            json.dump(data, file, default=numpy_encoder) """
+
+
+
         # Generate coco annotations
         
         bproc.writer.write_coco_annotations(os.path.join(args.output_dir, 'coco_data'),
@@ -709,7 +708,40 @@ for  obj in sample_surface_objects:
         # write the data to a .hdf5 container
         bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
 
-        write_annotations(annotations, dropped_object_list, store_relations_and_features, cam_counter, next_scene)
+        # take bounding boxes from COCO annotations
+
+        with open(os.path.join(args.output_dir, "coco_data/coco_annotations.json"), "r") as file:
+            coco = json.load(file)
+
+        image_ids = []
+        for iii in range(-cam_counter,0):
+            image_ids.append(coco["images"][iii]["id"])
+            
+        jjj = -1
+        bboxes = []#[] for frame in range(cam_counter)]      [-frame_counter -1]
+        bboxes_per_image = []
+        last_id = coco["annotations"][jjj]["image_id"]
+
+        while coco["annotations"][jjj]["image_id"] in image_ids:
+            actual_id = coco["annotations"][jjj]["image_id"]
+            frame_counter = last_id - coco["annotations"][jjj]["image_id"]
+            bboxes.append(coco["annotations"][jjj]["bbox"])
+            if len(bboxes_per_image) < frame_counter + 1:
+                bboxes_per_image.append(bboxes)
+                bboxes = []
+            if len(coco["annotations"]) > abs(jjj) + 1:
+                jjj -= 1
+            else:
+                break
+        bboxes_per_image.reverse()
+
+        # plt.imshow(np.array(data["instance_segmaps"][0]), cmap='gray')
+        # plt.axis('off')  # Die Achsenbeschriftungen ausblenden
+        # plt.show()
+        # plt.savefig("bild.png")  # Das Bild in eine Datei speichern
+
+        write_annotations(annotations, dropped_object_list, data, store_relations_and_features, cam_counter, 
+                          next_scene, bboxes_per_image)
         
         next_scene += 1
 

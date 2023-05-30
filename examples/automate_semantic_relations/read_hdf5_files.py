@@ -11,24 +11,26 @@ print(f.keys())
 groups = list(f.keys())
 print(list(f.keys()))
 
-# print(f['473']['attributes'][:,:])
-# print(list(f.keys()))
-# print(f['473'].keys())
-# print(f['473']['attributes'])
-# print(f['473']['attributes'][:,:])
-# print(f['473']['bboxes'])
-# print(f['473']['bboxes'][:,:])
-# print(f['473']['image'])
+print(f['473']['attributes'][:,:])
+print(list(f.keys()))
+print(f['473'].keys())
+print(f['473']['attributes'])
+print(f['473']['attributes'][:,:])
+print(f['473']['bboxes'])
+print(f['473']['bboxes'][:,:])
+print(f['473']['image'])
 
-# for i in range(int(groups[0]),int(groups[-1]) + 1):
+for i in range(int(groups[0]),int(groups[-1]) + 1):
     
-#     if str(i) in groups:
-#         print(f[str(i)]['objects'])
-#         print(f[str(i)]['objects'][:])
-#         print(i)
-#         print(f[str(i)]['attributes'][:,:])
-#         print(f[str(i)]['relations'])
-#         print(f[str(i)]['relations'][:,:,:])
+    if str(i) in groups:
+        # print(f[str(i)]['objects'])
+        # print(f[str(i)]['objects'][:])
+        # print(i)
+        # print(f[str(i)]['attributes'][:,:])
+        # print(f[str(i)]['relations'])
+        # print(f[str(i)]['relations'][:,:,:])
+        print(f[str(i)]['bboxes'])
+        print(f[str(i)]['bboxes'][:,:])
 
 """
 data = f[str(i)]['image'][:,:,:]
@@ -68,25 +70,23 @@ relations = np.array(number_relations * [-1*np.eye(number_elements)])
 print(relations) """
 
 
-d = h5py.File('examples/automate_semantic_relations/Test_08/output/val.h5', 'r')
+# d = h5py.File('examples/automate_semantic_relations/Test_08/output/val.h5', 'r')
 
-print(d.keys)
+# print(d.keys)
 
-groups = list(d["/"].keys())
+# groups = list(d["/"].keys())
 
-for i in range(int(groups[0]),int(groups[-1]) + 1):
+# for i in range(int(groups[0]),int(groups[-1]) + 1):
 
-    if str(i) in groups:
-        print("============================================================")
-        print(i)
-        print(d[str(i)]['image'])
-        print(d[str(i)]['attributes'])
-        print(d[str(i)]['attributes'][:,:])
-        print(d[str(i)]['objects'])
-        print(d[str(i)]['objects'][:])
-        
-        print(d[str(i)]['attributes'][:,:])
-        print(d[str(i)]['relations'])
-        print(d[str(i)]['relations'][:,:,:])
+#     if str(i) in groups:
+#         print("============================================================")
+#         print(i)
+#         print(d[str(i)]['image'])
+#         print(d[str(i)]['attributes'])
+#         print(d[str(i)]['attributes'][:,:])
+#         print(d[str(i)]['objects'])
+#         print(d[str(i)]['objects'][:])
+#         print(d[str(i)]['relations'])
+#         print(d[str(i)]['relations'][:,:,:])
 
-d.close()
+# d.close()
