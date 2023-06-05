@@ -643,45 +643,6 @@ for  obj in sample_surface_objects:
             json.dump(data, file, default=numpy_encoder) """
 
 
-
-        # Generate coco annotations
-        
-        bproc.writer.write_coco_annotations(os.path.join(args.output_dir, 'coco_data'),
-                                            instance_segmaps=data["instance_segmaps"],
-                                            instance_attribute_maps=data["instance_attribute_maps"],
-                                            colors=data["colors"],
-                                            color_file_format="JPEG")
-        
-        # write the data to a .hdf5 container
-        bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
-
-        # take bounding boxes from COCO annotations
-
-        with open(os.path.join(args.output_dir, "coco_data/coco_annotations.json"), "r") as file:
-            coco = json.load(file)
-
-        image_ids = []
-        for iii in range(-cam_counter,0):
-            image_ids.append(coco["images"][iii]["id"])
-            
-        jjj = -1
-        bboxes = []#[] for frame in range(cam_counter)]      [-frame_counter -1]
-        bboxes_per_image = []
-        last_id = coco["annotations"][jjj]["image_id"]
-
-        while coco["annotations"][jjj]["image_id"] in image_ids:
-            actual_id = coco["annotations"][jjj]["image_id"]
-            frame_counter = last_id - coco["annotations"][jjj]["image_id"]
-            bboxes.append(coco["annotations"][jjj]["bbox"])
-            if len(bboxes_per_image) < frame_counter + 1:
-                bboxes_per_image.append(bboxes)
-                bboxes = []
-            if len(coco["annotations"]) > abs(jjj) + 1:
-                jjj -= 1
-            else:
-                break
-        bboxes_per_image.reverse()
-
         # plt.imshow(np.array(data["instance_segmaps"][0]), cmap='gray')
         # plt.axis('off')  # Die Achsenbeschriftungen ausblenden
         # plt.show()
@@ -689,7 +650,7 @@ for  obj in sample_surface_objects:
 
         h5_file_name = "val.h5"
         bproc.writer.write_scene_graph(os.path.join(args.output_dir,h5_file_name), dropped_object_list, data, store_relations_and_features, 
-                                       cam_counter, bboxes_per_image)
+                                       cam_counter)
 
 
         

@@ -90,5 +90,9 @@ for i in range(int(groups[0]),int(groups[-1]) + 1):
         print(d[str(i)]['objects'][:])
         print(d[str(i)]['relations'])
         print(d[str(i)]['relations'][:,:,:])
+        print(d[str(i)]['bboxes'])
+        print(d[str(i)]['bboxes'][:,:])
+        print(d[str(i)]['bboxes2'])
+        print(d[str(i)]['bboxes2'][:,:])
 
 d.close()
