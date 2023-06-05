@@ -10,6 +10,17 @@ from blenderproc.python.utility.Utility import Utility
 def write_scene_graph(h5_file_path, scene_objects: list[MeshObject], data, relations_and_features: Dict, 
                       camera_counter: int, relations_number: int = 2 ):
     
+    """ Function that writes the annotations of a scene graph. It generates a h5 file with the image of 
+     the graph, the bounding boxes of each element in the frame, the name of the objects and their relations
+      with each other.
+    :param h5_file_path: Path in which the annotations are going to be stored.
+    :param scene_objects: Objects detected in the current scene.
+    :param data: Variable that contains the information about the images and the segmentation of the objects.
+    :param relations_and_features: Dictionary with the relations of each child object and its special features or attributes
+                                    like open or close for the microwave.
+    :param camera_counter: Counter of the stored camera poses, which represents the number of frames.
+    :param relations_number: Number of considered relations betwen objects, as default 2 (ON and INSIDE)."""
+    
     annotations_file = h5py.File(h5_file_path, 'a',track_order=True)
 
     if list(annotations_file.keys()):
@@ -71,6 +82,8 @@ def write_scene_graph(h5_file_path, scene_objects: list[MeshObject], data, relat
 def bbox_from_segmented_images(instance_segmaps: Optional[List[np.ndarray]] = None, instance_attribute_maps: Optional[List[dict]] = None, 
                                colors: Optional[List[np.ndarray]] = None, segmap_output_key: str = "segmap", segcolormap_output_key: str = "segcolormap", 
                                rgb_output_key: str = "colors"):
+    
+    """ Function that takes the segmentated images and generates bounding boxes for each object on the scene. """
 
     instance_segmaps = [] if instance_segmaps is None else list(instance_segmaps)
     colors = [] if colors is None else list(colors)
