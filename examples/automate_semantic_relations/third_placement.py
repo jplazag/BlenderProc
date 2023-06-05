@@ -7,7 +7,6 @@ from blenderproc.python.utility.CollisionUtility import CollisionUtility
 from typing import Dict
 import mathutils
 from matplotlib import pyplot as plt
-import h5py
 import sys
 from blenderproc.python.types.MeshObjectUtility import MeshObject
 import json
@@ -95,23 +94,10 @@ def place_object(obj_to_place: bproc.types.MeshObject, surface_obj: bproc.types.
     # Enable physics for objects of interest (active) and the surface (passive)
     # If the object already has the rigid body features enabled, disable those and set the desired behavior
     
-    if dropped_object_list_temp[0].has_rigidbody_enabled():
-        dropped_object_list_temp[0].disable_rigidbody()
-        dropped_object_list_temp[0].enable_rigidbody(True)
-    else:
-        dropped_object_list_temp[0].enable_rigidbody(True)
+    
+    dropped_object_list_temp[0].enable_rigidbody(True)
 
-    # if receiving_obj.has_rigidbody_enabled():
-    #     receiving_obj.disable_rigidbody()
-    #     receiving_obj.enable_rigidbody(False, collision_shape='MESH')
-    # else:
-    #     receiving_obj.enable_rigidbody(False, collision_shape='MESH')
-
-    if surface_obj.has_rigidbody_enabled():
-        surface_obj.disable_rigidbody()
-        surface_obj.enable_rigidbody(False)
-    else:
-        surface_obj.enable_rigidbody(False)
+    surface_obj.enable_rigidbody(False)
 
 
     # Run the physics simulation
@@ -354,46 +340,7 @@ def adding_new_object(parent: bproc.types.MeshObject, parent_attributes: Dict, c
     return  category_counter
 
 
-def write_annotations(h5_file, scene_objects: list[bproc.types.MeshObject], data, relations_and_features: Dict, 
-                      camera_counter: int, scene_number: int, bboxes: list, relations_number: int = 2 ):
-    objects_number = len(scene_objects)
-    relations = np.zeros(shape=(relations_number, objects_number, objects_number))
-    
-    for r_n in range(relations_number):
-        np.fill_diagonal(relations[r_n,:,:], -1)
 
-    objects = [scene_object.get_name().encode('utf-8') for scene_object in scene_objects]
-
-    
-    for counter, scene_object in enumerate(scene_objects):
-
-        current_relation = relations_and_features["relation"][counter].split()
-
-        # Since "NONE" relations does not have a related object, it is not required to search for that object's name
-
-        if current_relation[0] != "NONE":
-            parent_index = objects.index(" ".join(current_relation[1:]).encode('utf-8'))
-            child_index = objects.index(scene_object.get_name().encode('utf-8'))
-
-            if current_relation[0] == "ON":
-                
-                relations[0, child_index, parent_index] = 1
-            elif current_relation[0] == "INSIDE":
-                
-                relations[1, child_index, parent_index] = 1
-
-    for rendered_image in range(camera_counter):
-        group_name = str(scene_number + rendered_image)
-        h5_file.create_group(group_name, track_order=True)
-        h5_file[group_name].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
-        
-        h5_file[group_name].create_dataset('bboxes', data=np.array(bboxes[rendered_image]))
-
-        h5_file[group_name].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
-        h5_file[group_name].create_dataset('image_seg', data=np.array(data['instance_segmaps'][rendered_image])) 
-        h5_file[group_name].create_dataset('objects', (objects_number,), data=np.array(objects))
-
-        h5_file[group_name].create_dataset('relations', data=np.array(relations))
 
 
 def visible_objects_considering_glass(cam2world_matrix, sqrt_number_of_rays: int = 10):
@@ -544,16 +491,16 @@ store_relations_and_features = {"relation": [], "attribute": []}
 
 object_of_interest_counter = 0
 
-annotations = h5py.File(os.path.join(args.output_dir,"val.h5"), 'a',track_order=True)
+""" annotations = h5py.File(os.path.join(args.output_dir,"val.h5"), 'a',track_order=True) """
 
 objects_to_search_inside = {}
 
 
-if list(annotations.keys()):
+""" if list(annotations.keys()):
 
     next_scene = int(list(annotations["/"].keys())[-1]) + 1 
 else:
-    next_scene = 0
+    next_scene = 0 """
 
 for  obj in sample_surface_objects:
 
@@ -740,12 +687,11 @@ for  obj in sample_surface_objects:
         # plt.show()
         # plt.savefig("bild.png")  # Das Bild in eine Datei speichern
 
-        write_annotations(annotations, dropped_object_list, data, store_relations_and_features, cam_counter, 
-                          next_scene, bboxes_per_image)
-        
-        next_scene += 1
+        h5_file_name = "val.h5"
+        bproc.writer.write_scene_graph(os.path.join(args.output_dir,h5_file_name), dropped_object_list, data, store_relations_and_features, 
+                                       cam_counter, bboxes_per_image)
 
-annotations.close()
+
         
 
 
