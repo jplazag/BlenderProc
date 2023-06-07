@@ -1,14 +1,16 @@
 import numpy as np
+import cv2
 from typing import Optional, Dict, Union, Tuple, List
 import h5py
 import csv
 import bpy
+import os
 
 from blenderproc.python.types.MeshObjectUtility import MeshObject
 from blenderproc.python.utility.Utility import Utility
 
-def write_scene_graph(h5_file_path, scene_objects: list[MeshObject], data, relations_and_features: Dict, 
-                      camera_counter: int, relations_number: int = 2 ):
+def write_scene_graph(output_dir, h5_file_path, scene_objects: list[MeshObject], data, relations_and_features: Dict, 
+                      camera_counter: int, test_bboxes: bool = False, relations_number: int = 2 ):
     
     """ Function that writes the annotations of a scene graph. It generates a h5 file with the image of 
      the graph, the bounding boxes of each element in the frame, the name of the objects and their relations
@@ -19,9 +21,10 @@ def write_scene_graph(h5_file_path, scene_objects: list[MeshObject], data, relat
     :param relations_and_features: Dictionary with the relations of each child object and its special features or attributes
                                     like open or close for the microwave.
     :param camera_counter: Counter of the stored camera poses, which represents the number of frames.
+    :param test_bboxes: If True, run a routine that prints the images with the bounding boxes.
     :param relations_number: Number of considered relations betwen objects, as default 2 (ON and INSIDE)."""
     
-    annotations_file = h5py.File(h5_file_path, 'a',track_order=True)
+    annotations_file = h5py.File(os.path.join(output_dir,h5_file_path), 'a',track_order=True)
 
     if list(annotations_file.keys()):
 
@@ -66,6 +69,10 @@ def write_scene_graph(h5_file_path, scene_objects: list[MeshObject], data, relat
                                             instance_attribute_maps=data["instance_attribute_maps"],
                                             colors=data["colors"])
         
+        if test_bboxes:
+            test_bounding_boxes(data['colors'][rendered_image], bboxes[rendered_image], scene_number + rendered_image,
+                                output_dir)
+
         annotations_file[group_name].create_dataset('bboxes', data=np.array(bboxes[rendered_image]))
 
         annotations_file[group_name].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
@@ -179,3 +186,15 @@ def bbox_from_segmented_images(instance_segmaps: Optional[List[np.ndarray]] = No
         bounding_boxes_per_inst_segmap.append(bounding_boxes)
 
     return bounding_boxes_per_inst_segmap
+
+def test_bounding_boxes(color_image, bboxes, image_number, output_dir):
+    
+    for bbox in bboxes:
+        x = bbox[0]
+        y = bbox[1]
+        w = bbox[2]
+        h = bbox[3]
+
+        cv2.rectangle(color_image, (x, y), (x+w, y+h), (0, 0, 255), 2)
+
+    cv2.imwrite(os.path.join(output_dir,f'image_with_bboxes{image_number}.jpg'),color_image)      

@@ -14,7 +14,8 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
                             min_distance: float = 0.25, max_distance: float = 0.6,
                             up_direction: Optional[np.ndarray] = None,
                             check_all_bb_corners_over_surface: bool = True,
-                            objects_to_check: List[MeshObject] = []) -> List[MeshObject]:
+                            objects_to_check: List[MeshObject] = [],
+                            verbose = True) -> List[MeshObject]:
     """ Samples objects poses on a surface.
 
     The objects are positioned slightly above the surface due to the non-axis aligned nature of used bounding boxes
@@ -48,7 +49,8 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
 
     placed_objects: List[MeshObject] = []
     for obj in objects_to_sample:
-        print(f"Trying to put {obj.get_name()}")
+        if verbose: 
+            print(f"Trying to put {obj.get_name()}")
 
         placed_successfully = False
 
@@ -59,11 +61,13 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
                 del bvh_cache[obj.get_name()]
 
             if not CollisionUtility.check_intersections(obj, bvh_cache, placed_objects + objects_to_check, []):
-                print("Collision detected, retrying!")
+                if verbose: 
+                    print("Collision detected, retrying!")
                 continue
 
             if not _OnSurfaceSampler.check_above_surface(obj, surface, up_direction, check_all_bb_corners_over_surface):
-                print("Not above surface, retrying!")
+                if verbose: 
+                    print("Not above surface, retrying!")
                 continue
 
             _OnSurfaceSampler.drop(obj, up_direction, surface_height)
@@ -72,25 +76,30 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
                 del bvh_cache[obj.get_name()]
 
             if not _OnSurfaceSampler.check_above_surface(obj, surface, up_direction, check_all_bb_corners_over_surface):
-                print("Not above surface after drop, retrying!")
+                if verbose: 
+                    print("Not above surface after drop, retrying!")
                 continue
 
             if not _OnSurfaceSampler.check_spacing(obj, placed_objects + objects_to_check, min_distance, max_distance):
-                print("Bad spacing after drop, retrying!")
+                if verbose: 
+                    print("Bad spacing after drop, retrying!")
                 continue
 
             if not CollisionUtility.check_intersections(obj, bvh_cache, placed_objects + objects_to_check, []):
-                print("Collision detected after drop, retrying!")
+                if verbose: 
+                    print("Collision detected after drop, retrying!")
                 continue
 
-            print(f"Placed object \"{obj.get_name()}\" successfully at {obj.get_location()} after {i + 1} iterations!")
+            if verbose: 
+                print(f"Placed object \"{obj.get_name()}\" successfully at {obj.get_location()} after {i + 1} iterations!")
             placed_objects.append(obj)
 
             placed_successfully = True
             break
 
         if not placed_successfully:
-            print(f"Giving up on {obj.get_name()}, deleting...")
+            if verbose: 
+                print(f"Giving up on {obj.get_name()}, deleting...")
             obj.delete()
 
     return placed_objects

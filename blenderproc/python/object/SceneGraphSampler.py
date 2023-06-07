@@ -12,10 +12,9 @@ from blenderproc.python.sampler.UpperRegionSampler import upper_region
 from blenderproc.python.sampler.UniformSO3 import uniformSO3
 from blenderproc.python.utility.CollisionUtility import CollisionUtility
 
-def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_attributes: Dict, objects_boxes, 
-                      dropped_object_list: list, category_counter, bvh_cache: Optional[Dict[str, mathutils.bvhtree.BVHTree]],
-                      room_objs, relations_and_attributes,
-                      objects_to_look_for):
+def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_attributes: Dict, objects_boxes: list, 
+                      dropped_object_list: list, category_counter: int, bvh_cache: Optional[Dict[str, mathutils.bvhtree.BVHTree]],
+                      room_objs: list[MeshObject], relations_and_attributes: Dict, verbose = True):
     """ Recursive function that insert objects (one after another if the base object so allow it) in different configurations
     (ON, INSIDE) 
 
@@ -71,13 +70,7 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
 
                 elif relation_to_establish == 1: # If == 1 take the inner surface of the parent; INSIDE relation
                     height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
-                    # with open('examples/automate_semantic_relations/heights.txt', 'w') as f:
-                    #     height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
-                    #     f.write( f"[ {height}]")
-                    # f.close()
-                    # Variable to store all the objects placed inside, so we could check if they are visible
-                    objects_to_look_for[parent.get_name()] = [parent] # Start with the parent to use it later
-                                                                      # in the camera pose generation
+                    
                     print(f"The surface is going to be taken from {parent.get_name()}")
                     # surface_obj = bproc.object.extract_floor([parent], 
                     #                                         height_list_path="examples/automate_semantic_relations/heights.txt",
@@ -102,16 +95,17 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
                 for ii in range(np.random.randint(1, max_n_obj)):
 
                     # Load the object, which should be sampled on the surface
-                    child_attributes = children_attributes[np.random.randint(0, len(children_attributes) )] #n]
+                    child_attributes = children_attributes[np.random.randint(0, len(children_attributes) )]
+                    # child_attributes = children_attributes[n]
                     sampling_obj = load_obj(child_attributes["path"])
                     actual_attribute = 0
-
-                    print("--------------------------------------------------------------")
-                    
-                    print(f"The actual parent object is {parent.get_name()}")
-                    print(f"And the relation(s) that are going to be generate is/are {relation_to_establish}")
-                    print(f"This is the child number {ii}")
-                    print(f"The name of that child object is {sampling_obj[0].get_name()}")
+                    if verbose:
+                        print("--------------------------------------------------------------")
+                        
+                        print(f"The actual parent object is {parent.get_name()}")
+                        print(f"And the relation(s) that are going to be generate is/are {relation_to_establish}")
+                        print(f"This is the child number {ii}")
+                        print(f"The name of that child object is {sampling_obj[0].get_name()}")
                     
                     if child_attributes["components"]:
 
@@ -120,25 +114,28 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
                     # Compare the size of the surface with the base of the bounding box from the sampling_obj
                     surface_area = calculate_area_of_surface(surface_obj)
                     sampling_obj_area = calculate_area_of_surface(sampling_obj[0], y_vector=np.array([0,0,1]))
-
-                    print(f"The base of the child object is {round(sampling_obj_area, 3)} m^2")
-                    print(f"The area of the parent surface is {round(surface_area, 3)} m^2")
+                    if verbose:
+                        print(f"The base of the child object is {round(sampling_obj_area, 3)} m^2")
+                        print(f"The area of the parent surface is {round(surface_area, 3)} m^2")
 
                     if surface_area <= sampling_obj_area + 0.06:
                         sampling_obj[0].delete()
-                        print("--------------------------------------------------------------")
+                        print("Area too big")
+
+                        if verbose: print("--------------------------------------------------------------")
                         continue
 
-                    dropped_object = place_object(sampling_obj, surface_obj, room_objs, dropped_object_list)
+                    dropped_object = place_object(sampling_obj, surface_obj, room_objs, dropped_object_list, verbose=verbose)
 
                         
 
                     if not dropped_object[0]: # If the sampling_obj couldn't be placed
-                        print("sampling_obj couldn't be placed")
-                        print("--------------------------------------------------------------")
+                        if verbose:
+                            print("sampling_obj couldn't be placed")
+                            print("--------------------------------------------------------------")
                         continue
 
-                    print("--------------------------------------------------------------")
+                    if verbose: print("--------------------------------------------------------------")
 
                     # Store the type of relation of the dropped object
                     if was_putted_on:
@@ -146,7 +143,6 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
                     elif was_putted_inside:
                         parent_name = parent.get_name()
                         relation = f"INSIDE {parent_name}"
-                        objects_to_look_for[parent_name].append(dropped_object[0])
 
                     
 
@@ -157,9 +153,9 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
                     # next_child = children_attributes[np.random.randint(0, len(children_attributes))]
 
 
-                    category_counter = sample_scene_graph(sampling_obj[0], child_attributes, children_attributes, objects_boxes, dropped_object_list, 
-                                                        category_counter, bvh_cache, room_objs, relations_and_attributes,
-                                                        objects_to_look_for) 
+                    category_counter = sample_scene_graph(sampling_obj[0], child_attributes, children_attributes, objects_boxes, 
+                                                          dropped_object_list, category_counter, bvh_cache, room_objs,
+                                                          relations_and_attributes, verbose=verbose) 
                     
                     if child_attributes["components"] == "door":
 
@@ -180,21 +176,19 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
                 # join surface objects again
                 parent.join_with_other_objects([surface_obj])
 
-                # ! Blender crash
-                # surface_obj.delete()
-                # Join the component 
                 
     
     return  category_counter
 
 
-def place_object(obj_to_place: MeshObject, surface_obj: MeshObject, room_objs: list[MeshObject], dropped_objects: list[MeshObject]):
+def place_object(obj_to_place: list[MeshObject], surface_obj: MeshObject, room_objs: list[MeshObject], dropped_objects: list[MeshObject],
+                 verbose=True):
 
     """ Function to place an object on other, considering that the base or receiving object could have 
      preestablished objects on it. This function places the object and tests if it is close enough to
      the surface.
       
-    :param obj_to_place: New object to place.
+    :param obj_to_place: New object to place in a list.
     :param surface_obj: Surface on which the new object is to be placed
     :param room_objs: Objects in the loaded room to check collisions with.
     :param dropped_objects: New objects that have been placed in the loaded room.
@@ -215,15 +209,18 @@ def place_object(obj_to_place: MeshObject, surface_obj: MeshObject, room_objs: l
         #Randomized rotation of the sampled object
         obj2.set_rotation_euler(uniformSO3(around_y=False, around_x=False, around_z=True))
 
-    tries = 0
-
     objects_to_check = room_objs + dropped_objects
     
     # Sampling of the object
+    if "mug" in obj_to_place[0].get_name():
+        check_all_corners = False
+    else:
+        check_all_corners = True
+
     dropped_object_list_temp = sample_poses_on_surface(obj_to_place, surface_obj, sample_pose,
-                                                                    max_tries = 100, min_distance=0.1, max_distance=10,
-                                                                    check_all_bb_corners_over_surface=False,
-                                                                    objects_to_check=objects_to_check )
+                                                       max_tries = 100, min_distance=0.1, max_distance=10,
+                                                       check_all_bb_corners_over_surface=check_all_corners,
+                                                       objects_to_check=objects_to_check, verbose=verbose )
 
 
 
@@ -233,7 +230,7 @@ def place_object(obj_to_place: MeshObject, surface_obj: MeshObject, room_objs: l
         return None, None
     
 
-    # ! KeyError: 'bpy_prop_collection[key]: key "Floor" not found'
+
 
     # Enable physics for objects of interest (active) and the surface (passive)
     # If the object already has the rigid body features enabled, disable those and set the desired behavior
@@ -267,8 +264,8 @@ def place_object(obj_to_place: MeshObject, surface_obj: MeshObject, room_objs: l
         print(f"The object couldn't be placed")
         # skip if no object is left
         return None, None
-    
-    
+
+
     dropped_object_list_temp[0].disable_rigidbody()
     surface_obj.disable_rigidbody()
     

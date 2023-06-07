@@ -1,22 +1,23 @@
 import blenderproc as bproc
 import os
-import bpy
 import numpy as np
 import argparse
 
 from typing import Dict
 import mathutils
-from matplotlib import pyplot as plt
 import sys
-from blenderproc.python.types.MeshObjectUtility import MeshObject
-import json
+# import json
+# from matplotlib import pyplot as plt
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("front", help="Path to the 3D front file")
 parser.add_argument("future_folder", help="Path to the 3D Future Model folder.")
 parser.add_argument("front_3D_texture_path", help="Path to the 3D FRONT texture folder.")
 parser.add_argument('treed_obj_path', help="Path to the downloaded 3D object")
-parser.add_argument('output_dir', nargs='?', default="examples/automate_semantic_relations/Test_01/output", help="Path to where the final files, will be saved")
+parser.add_argument('output_dir', nargs='?', default="examples/automate_semantic_relations/Test_01/output", 
+                    help="Path to where the final files, will be saved")
 args = parser.parse_args()
 
 if not os.path.exists(args.front) or not os.path.exists(args.future_folder) or not os.path.exists(args.treed_obj_path):
@@ -38,6 +39,39 @@ room_objs = bproc.loader.load_front3d(
     label_mapping=mapping
 )
 
+def suitable_camera_poses(cycles: int, objects_location, objects_size: float, radius_min: float, radius_max: float,
+                          visible_objects_threshold: float, dropped_object_list, cam_counter: int):
+    for i in range(cycles):
+        # Place Camera
+        camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
+                                            radius_max=radius_max, elevation_min=0, elevation_max=15)
+
+        # Make sure that object is not always in the center of the camera
+        toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.5)
+
+        # Compute rotation based on vector going from location towards poi/en/stable/strings.html
+
+
+        rotation_matrix = bproc.camera.rotation_from_forward_vec(toward_direction - camera_location, 
+                                                                inplane_rot=np.random.uniform(-0.349, 0.349))
+        # Add homog cam pose based on location an rotation
+        cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
+        # print(np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
+        #                     for object in dropped_object_list])/len(dropped_object_list))
+        
+
+        if visible_objects_threshold <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
+                                for object in dropped_object_list])/len(dropped_object_list):
+
+            bproc.camera.add_camera_pose(cam2world_matrix)
+            cam_counter += 1
+            print(f"One camera pose looking at least to {visible_objects_threshold * 100} % of the interest objects has been stored")
+        if cam_counter == 2:
+            break
+
+    return cam_counter
+
+
 # Cache to fasten data Collection
 bvh_cache : Dict[str, mathutils.bvhtree.BVHTree] = {}
 
@@ -46,11 +80,14 @@ bproc.camera.set_resolution(512, 512)
 
 # Select the objects, where other objects should be sampled on
 sample_surface_objects = []
-for obj in room_objs:
-    if "dining table" in obj.get_name().lower(): #if "table" in obj.get_name().lower() or "desk" in obj.get_name().lower():
-        sample_surface_objects.append(obj)
+for room_obj in room_objs:
+    
+    # if "table" in room_obj.get_name().lower() or "desk" in room_obj.get_name().lower(): 
+    if "dining table" in room_obj.get_name().lower(): 
+    # if "table.003" == room_obj.get_name().lower(): 
+        sample_surface_objects.append(room_obj)
 
-    obj.set_cp("category_id", 0)
+    room_obj.set_cp("category_id", 0)
 
 
 # Objects from ODB that are going to be placed, we also store the size and some tags that tell us what kind of relations
@@ -68,22 +105,12 @@ objects_of_interest = [ {"name": "op_microwave",        "tags": [True,     True]
                           "surface_distance": 0.005}]
 
 
-store_relations_and_features = {"relation": [], "attribute": []}
+store_relations_and_features = {"relation": [], "attribute": []} # store_relations_and_features of the placed objects
+                                                                 # attributes like "open" for the microwave
 
-object_of_interest_counter = 0
+placed_obj_counter = 0
 
-""" annotations = h5py.File(os.path.join(args.output_dir,"val.h5"), 'a',track_order=True) """
-
-objects_to_search_inside = {}
-
-
-""" if list(annotations.keys()):
-
-    next_scene = int(list(annotations["/"].keys())[-1]) + 1 
-else:
-    next_scene = 0 """
-
-for  obj in sample_surface_objects:
+for  base_obj in sample_surface_objects:
 
     
     # The loop starts with and UndoAfterExecution in order to clean up the cam poses from the previous iteration and
@@ -94,23 +121,12 @@ for  obj in sample_surface_objects:
         objects_boxes = []
         dropped_object_list = []
         
-        object_of_interest_counter = bproc.object.sample_scene_graph(obj, {"tags": [True, False]}, objects_of_interest, objects_boxes, 
-                                                                     dropped_object_list, object_of_interest_counter, bvh_cache, 
-                                                                     room_objs, store_relations_and_features, objects_to_search_inside)
+        placed_obj_counter = bproc.object.sample_scene_graph(base_obj, {"tags": [True, False]}, objects_of_interest, objects_boxes, 
+                                                                     dropped_object_list, placed_obj_counter, bvh_cache, 
+                                                                     room_objs, store_relations_and_features, verbose=False)
         
-
         if not dropped_object_list:
             continue
-
-
-        # Set the custom property in the the base object (the table or desk)
-        obj.set_cp("category_id", object_of_interest_counter + 1)
-        object_of_interest_counter += 1
-        dropped_object_list.append(obj)
-        # Store the type of relation of the dropped object
-        store_relations_and_features["relation"].append("NONE")
-        # If the object has a special characteristic that needs to be described (microwave open)
-        store_relations_and_features["attribute"].append(float(0.0))
 
         print("================================================")
         print(f"{len(dropped_object_list)} objects were placed")
@@ -121,69 +137,42 @@ for  obj in sample_surface_objects:
 
         # Init bvh tree containing all mesh objects
         bvh_tree = bproc.object.create_bvh_tree_multi_objects(bproc.object.get_all_mesh_objects())
-
-        for obj in dropped_object_list:
-            print(obj.get_name())
+        print(base_obj.get_name())
+        print("Objects of interest: *********************************")
+        for object_listed in dropped_object_list:
+            print(object_listed.get_name())
 
         print("******************************************************")
-        inside_objects = [] # Array to store all the objects placed inside without distinction
-        if len(objects_to_search_inside.values()) > 0:
-            for _, inside_group in objects_to_search_inside.items():
-                
-                inside_objects.extend(inside_group[1:])
 
-                object_to_focus = inside_group[0] # Take the parent to use it as point of interest
-                 # Point of interest to shoot
-                poi = bproc.object.compute_poi([object_to_focus])
-                
-                object_size = np.max(np.max(object_to_focus.get_bound_box(), axis=0) - np.min(object_to_focus.get_bound_box(), axis=0))
-                r_min = object_size
-                r_max = object_size * 3
-                proximity_checks = {"min": r_min, "avg": {"min": r_min , "max": r_max * 2 }, "no_background": True}
-                
-                for i in range(50):
-                    #Place camera
-                    camera_location = bproc.sampler.shell(center=poi, radius_min=r_min, radius_max=r_max,
-                                                        elevation_min=0, elevation_max=20)
-
-                    # Make sure that object is not always in the center of the camera
-                    toward_direction = (poi + np.random.uniform(0, 1, size=3) * object_size * 0.5) - camera_location
-
-                    # Compute rotation based on vector going from location towards poi/en/stable/strings.html
-                    rotation_matrix = bproc.camera.rotation_from_forward_vec(toward_direction - camera_location, inplane_rot=np.random.uniform(-0.349, 0.349))
-                    # Add homog cam pose based on location an rotation
-                    cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
-                    
-                    objects_seen = bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15)
-                    
-                    if len(inside_group) > 1:
-                        # print(len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]))
-                        if len(set(objects_seen) & set(inside_group[1:])) / len(inside_group[1:]) > 0.2:
-                            if bproc.camera.perform_obstacle_in_view_check(cam2world_matrix, proximity_checks, bvh_tree):
-                                bproc.camera.add_camera_pose(cam2world_matrix)
-                                cam_counter += 1
-                                print("One camera pose looking inside was stored")
-                    if cam_counter > 3:
-                        break
-
-        first_cycle_cam_counter =  cam_counter
         if cam_counter < 6:
-            
-
             # Find a point of interest in the frame to focus, mean of all the bounding boxes of the objects
             objects_location = np.mean(objects_boxes, axis=0)
             objects_size = np.max(np.max(objects_boxes, axis=0) - np.min(objects_boxes, axis=0))
-            radius_min = objects_size * 2
-            radius_max = objects_size * 3
-            proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max * 2 }, "no_background": True}
-            
-            for i in range(500):
+            print(f"objects_size: {objects_size}")
+            if objects_size <= 0.50:
+                radius_min = objects_size * 3 
+                radius_max = objects_size * 4
+            elif objects_size <= 0.80:
+                radius_min = objects_size * 1.5
+                radius_max = objects_size * 2
+            else:
+                radius_min = objects_size / 1.5
+                radius_max = objects_size * 2
+            # proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max * 2 }, "no_background": True}
+
+            for number_of_cycles, visible_objects_threshold in zip([300, 200, 150, 50], [1, 0.85, 0.75, 0.7]):
+                
+                cam_counter = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
+                                                    visible_objects_threshold, dropped_object_list, cam_counter)
+                if cam_counter == 2:
+                    break
+            """ for i in range(700):
                 # Place Camera
                 camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
                                                     radius_max=radius_max, elevation_min=0, elevation_max=15)
 
                 # Make sure that object is not always in the center of the camera
-                toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.5) - camera_location
+                toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.5)
 
                 # Compute rotation based on vector going from location towards poi/en/stable/strings.html
 
@@ -194,20 +183,36 @@ for  obj in sample_surface_objects:
                 cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
                 # print(np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
                 #                     for object in dropped_object_list])/len(dropped_object_list))
-
-                objects_to_check = list(set(dropped_object_list) - set(inside_objects))
                 
+                if i > 300 and i < 500:
+                    visible_objects_threshold = 0.85
+                elif i > 500 and i <= 650:
+                    visible_objects_threshold = 0.75
+                elif i > 650 and i <= 700:
+                    visible_objects_threshold = 0.7
 
-                if 0.6 <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
-                                    for object in objects_to_check])/len(objects_to_check):
+                if visible_objects_threshold <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
+                                        for object in dropped_object_list])/len(dropped_object_list):
 
                     bproc.camera.add_camera_pose(cam2world_matrix)
                     cam_counter += 1
-                    print("One camera pose looking all the objects in general was stored")
-                if cam_counter >= first_cycle_cam_counter + 2:
-                    break
+                    print(f"One camera pose looking at least to {visible_objects_threshold * 100} % of the interest objects has been stored")
+                if cam_counter == 2:
+                    break """
             if cam_counter == 0:
-                raise Exception("No valid camera pose found!")
+                print(f"Image with the object {base_obj.get_name()} as a main parent has been skipped, since there are no suitable camera poses")
+                continue
+                # raise Exception("No valid camera pose found!")
+
+        
+        # Set the custom property in the the base object (the table or desk)
+        base_obj.set_cp("category_id", placed_obj_counter + 1)
+        placed_obj_counter += 1
+        dropped_object_list.append(base_obj)
+        # Store the type of relation of the dropped object
+        store_relations_and_features["relation"].append("NONE")
+        # If the object has a special characteristic that needs to be described (microwave open)
+        store_relations_and_features["attribute"].append(float(0.0))
 
         bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance"])
 
@@ -230,8 +235,11 @@ for  obj in sample_surface_objects:
         # plt.savefig("bild.png")  # Das Bild in eine Datei speichern
 
         h5_file_name = "val.h5"
-        bproc.writer.write_scene_graph(os.path.join(args.output_dir,h5_file_name), dropped_object_list, data, store_relations_and_features, 
-                                       cam_counter)
+        bproc.writer.write_scene_graph(args.output_dir, h5_file_name, dropped_object_list, data, 
+                                    store_relations_and_features, cam_counter, test_bboxes=True)
+
+        bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
+        
 
 
         
