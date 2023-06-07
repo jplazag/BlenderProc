@@ -166,39 +166,7 @@ for  base_obj in sample_surface_objects:
                                                     visible_objects_threshold, dropped_object_list, cam_counter)
                 if cam_counter == 2:
                     break
-            """ for i in range(700):
-                # Place Camera
-                camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
-                                                    radius_max=radius_max, elevation_min=0, elevation_max=15)
-
-                # Make sure that object is not always in the center of the camera
-                toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.5)
-
-                # Compute rotation based on vector going from location towards poi/en/stable/strings.html
-
-
-                rotation_matrix = bproc.camera.rotation_from_forward_vec(toward_direction - camera_location, 
-                                                                        inplane_rot=np.random.uniform(-0.349, 0.349))
-                # Add homog cam pose based on location an rotation
-                cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
-                # print(np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
-                #                     for object in dropped_object_list])/len(dropped_object_list))
-                
-                if i > 300 and i < 500:
-                    visible_objects_threshold = 0.85
-                elif i > 500 and i <= 650:
-                    visible_objects_threshold = 0.75
-                elif i > 650 and i <= 700:
-                    visible_objects_threshold = 0.7
-
-                if visible_objects_threshold <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
-                                        for object in dropped_object_list])/len(dropped_object_list):
-
-                    bproc.camera.add_camera_pose(cam2world_matrix)
-                    cam_counter += 1
-                    print(f"One camera pose looking at least to {visible_objects_threshold * 100} % of the interest objects has been stored")
-                if cam_counter == 2:
-                    break """
+            
             if cam_counter == 0:
                 print(f"Image with the object {base_obj.get_name()} as a main parent has been skipped, since there are no suitable camera poses")
                 continue
@@ -217,22 +185,6 @@ for  base_obj in sample_surface_objects:
         bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance"])
 
         data = bproc.renderer.render()
-
-
-        """ def numpy_encoder(obj):
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()  # Numpy-Array in Python-Liste umwandeln
-            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
-
-        
-        with open("daten.json", "w") as file:
-            json.dump(data, file, default=numpy_encoder) """
-
-
-        # plt.imshow(np.array(data["instance_segmaps"][0]), cmap='gray')
-        # plt.axis('off')  # Die Achsenbeschriftungen ausblenden
-        # plt.show()
-        # plt.savefig("bild.png")  # Das Bild in eine Datei speichern
 
         h5_file_name = "val.h5"
         bproc.writer.write_scene_graph(args.output_dir, h5_file_name, dropped_object_list, data, 
