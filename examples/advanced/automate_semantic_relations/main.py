@@ -41,6 +41,8 @@ room_objs = bproc.loader.load_front3d(
 
 def suitable_camera_poses(cycles: int, objects_location, objects_size: float, radius_min: float, radius_max: float,
                           visible_objects_threshold: float, dropped_object_list, cam_counter: int):
+    
+    objects_on_all_frames = []
     for i in range(cycles):
         # Place Camera
         camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
@@ -58,18 +60,22 @@ def suitable_camera_poses(cycles: int, objects_location, objects_size: float, ra
         cam2world_matrix = bproc.math.build_transformation_mat(camera_location, rotation_matrix)
         # print(np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
         #                     for object in dropped_object_list])/len(dropped_object_list))
+
+        objects_on_frame = []
         
-
-        if visible_objects_threshold <= np.sum([object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15) 
-                                for object in dropped_object_list])/len(dropped_object_list):
-
+        objects_on_frame = [object for object in dropped_object_list
+                            if object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15)]
+        
+        if visible_objects_threshold <= len(objects_on_frame) / len(dropped_object_list):
+            
+            objects_on_all_frames.append(objects_on_frame)
             bproc.camera.add_camera_pose(cam2world_matrix)
             cam_counter += 1
             print(f"One camera pose looking at least to {visible_objects_threshold * 100} % of the interest objects has been stored")
         if cam_counter == 2:
             break
 
-    return cam_counter
+    return cam_counter, objects_on_all_frames
 
 
 # Cache to fasten data Collection
@@ -158,21 +164,8 @@ for  base_obj in sample_surface_objects:
         else:
             radius_min = objects_size / 1.5
             radius_max = objects_size * 2
-        # proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max * 2 }, "no_background": True}
-
-        for number_of_cycles, visible_objects_threshold in zip([300, 200, 150, 50], [1, 0.85, 0.75, 0.7]):
             
-            cam_counter = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
-                                                visible_objects_threshold, dropped_object_list, cam_counter)
-            if cam_counter == 2:
-                break
-        
-        if cam_counter == 0:
-            print(f"Image with the object {base_obj.get_name()} as a main parent has been skipped, since there are no suitable camera poses")
-            continue
-            # raise Exception("No valid camera pose found!")
 
-        
         # Set the custom property in the the base object (the table or desk)
         base_obj.set_cp("category_id", placed_obj_counter + 1)
         placed_obj_counter += 1
@@ -182,13 +175,28 @@ for  base_obj in sample_surface_objects:
         # If the object has a special characteristic that needs to be described (microwave open)
         store_relations_and_features["attribute"].append(float(0.0))
 
+        objects_on_frames = []
+
+        for number_of_cycles, visible_objects_threshold in zip([300, 200, 150, 50], [1, 0.85, 0.75, 0.7]):
+            
+            cam_counter, objects_on_frames_temp = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
+                                                                        visible_objects_threshold, dropped_object_list, cam_counter)
+            objects_on_frames.extend(objects_on_frames_temp)
+            if cam_counter == 2:
+                break
+        
+        if cam_counter == 0:
+            print(f"Image with the object {base_obj.get_name()} as a main parent has been skipped, since there are no suitable camera poses")
+            continue
+            # raise Exception("No valid camera pose found!")
+
+
         bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance"])
 
         data = bproc.renderer.render()
 
         h5_file_name = "val.h5"
-        bproc.writer.write_scene_graph(args.output_dir, h5_file_name, dropped_object_list, data, 
-                                    store_relations_and_features, cam_counter, test_bboxes=True)
+        bproc.writer.write_scene_graph(args.output_dir, h5_file_name, objects_on_frames, data, store_relations_and_features)
 
         bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
         
