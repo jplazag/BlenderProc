@@ -25,6 +25,10 @@ def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObje
     
     annotations_file = h5py.File(os.path.join(output_dir,h5_file_name), 'a',track_order=True)
 
+    # Get bounding boxes of every object in the current frame
+    bboxes = bbox_from_segmented_images(instance_segmaps=data["instance_segmaps"], 
+                                        instance_attribute_maps=data["instance_attribute_maps"])
+
     if list(annotations_file.keys()):
 
         scene_number = int(list(annotations_file["/"].keys())[-1]) + 1 
@@ -58,16 +62,16 @@ def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObje
                 elif current_relation[0] == "INSIDE":
                     
                     relations[1, child_index, parent_index] = 1
+            
 
         group_name = str(scene_number + rendered_image)
         annotations_file.create_group(group_name, track_order=True)
         annotations_file[group_name].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
         
-        # Get bounding boxes of every object in the current frame
-        bboxes = bbox_from_segmented_images(instance_segmaps=data["instance_segmaps"], 
-                                            instance_attribute_maps=data["instance_attribute_maps"],
-                                            colors=data["colors"])
         
+        
+        # test_bounding_boxes(data['colors'][rendered_image], bboxes[rendered_image], scene_number + rendered_image,
+        #                         output_dir)
 
         annotations_file[group_name].create_dataset('bboxes', data=np.array(bboxes[rendered_image]))
 
@@ -82,70 +86,12 @@ def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObje
     annotations_file.close()
 
 
-def bbox_from_segmented_images(instance_segmaps: Optional[List[np.ndarray]] = None, instance_attribute_maps: Optional[List[dict]] = None, 
-                               colors: Optional[List[np.ndarray]] = None, segmap_output_key: str = "segmap", segcolormap_output_key: str = "segcolormap", 
-                               rgb_output_key: str = "colors"):
+def bbox_from_segmented_images(instance_segmaps: Optional[List[np.ndarray]] = None, instance_attribute_maps: Optional[List[dict]] = None):
     
     """ Function that takes the segmentated images and generates bounding boxes for each object on the scene. """
-
-    instance_segmaps = [] if instance_segmaps is None else list(instance_segmaps)
-    colors = [] if colors is None else list(colors)
-    if instance_attribute_maps is None:
-        instance_attribute_maps = []
-
-    if len(colors) > 0 and len(colors[0].shape) == 4:
-        raise ValueError("BlenderProc currently does not support writing coco annotations for stereo images. "
-                            "However, you can enter left and right images / segmaps separately.")
-
-    if not instance_segmaps:
-        # Find path pattern of segmentation images
-        segmentation_map_output = Utility.find_registered_output_by_key(segmap_output_key)
-        if segmentation_map_output is None:
-            raise RuntimeError(f"There is no output registered with key {segmap_output_key}. Are you sure you "
-                                f"ran the SegMapRenderer module before?")
-
-    if not colors:
-        # Find path pattern of rgb images
-        rgb_output = Utility.find_registered_output_by_key(rgb_output_key)
-        if rgb_output is None:
-            raise RuntimeError(f"There is no output registered with key {rgb_output_key}. Are you sure you "
-                                f"ran the RgbRenderer module before?")
-
-    if not instance_attribute_maps:
-        # Find path of name class mapping csv file
-        segcolormap_output = Utility.find_registered_output_by_key(segcolormap_output_key)
-        if segcolormap_output is None:
-            raise RuntimeError(f"There is no output registered with key {segcolormap_output_key}. Are you sure you "
-                                f"ran the SegMapRenderer module with 'map_by' set to 'instance' before?")
-        
-    # collect all mappings from csv (backwards compat)
-    segcolormaps = []
-    # collect all instance segmaps (backwards compat)
-    inst_segmaps = []
-
-    # for each rendered frame
-    for frame in range(bpy.context.scene.frame_start, bpy.context.scene.frame_end):
-
-        if not instance_attribute_maps:
-            # read colormappings, which include object name/class to integer mapping
-            segcolormap = []
-            with open(segcolormap_output["path"] % frame, 'r', encoding="utf-8") as csvfile:
-                reader = csv.DictReader(csvfile)
-                for mapping in reader:
-                    segcolormap.append(mapping)
-            segcolormaps.append(segcolormap)
-
-        if not instance_segmaps:
-            # Load segmaps (backwards compat)
-            segmap = np.load(segmentation_map_output["path"] % frame)
-            inst_channel = int(segcolormap[0]['channel_instance'])
-            inst_segmaps.append(segmap[:, :, inst_channel])
-
-    instance_attribute_maps = segcolormaps if segcolormaps else instance_attribute_maps
-    instance_segmaps = inst_segmaps if inst_segmaps else instance_segmaps
     
     instance_2_category_maps = []
-
+    
     for inst_attribute_map in instance_attribute_maps:
         instance_2_category_map = {}
         for inst in inst_attribute_map:
@@ -157,18 +103,19 @@ def bbox_from_segmented_images(instance_segmaps: Optional[List[np.ndarray]] = No
         instance_2_category_maps.append(instance_2_category_map)
 
     bounding_boxes_per_inst_segmap = []
-
-    for inst_segmap, instance_2_category_map in zip(instance_segmaps, instance_2_category_maps):
+    
+    for instance_segmaps, instance_2_category_map in zip(instance_segmaps, instance_2_category_maps):
         bounding_boxes = []
 
+
         # Go through all objects visible in this image
-        instances = np.unique(inst_segmap)
+        instances = np.unique(instance_segmaps)
         # Remove background
         instances = np.delete(instances, np.where(instances == 0))
         for inst in instances:
             if inst in instance_2_category_map:
                 # Calc object mask
-                binary_inst_mask = np.where(inst_segmap == inst, 1, 0)
+                binary_inst_mask = np.where(instance_segmaps == inst, 1, 0)
                 # Add coco info for object in this image
                 rows = np.any(binary_inst_mask, axis=1)
                 cols = np.any(binary_inst_mask, axis=0)
