@@ -144,33 +144,33 @@ for  base_obj in sample_surface_objects:
 
         print("******************************************************")
 
-        if cam_counter < 6:
-            # Find a point of interest in the frame to focus, mean of all the bounding boxes of the objects
-            objects_location = np.mean(objects_boxes, axis=0)
-            objects_size = np.max(np.max(objects_boxes, axis=0) - np.min(objects_boxes, axis=0))
-            print(f"objects_size: {objects_size}")
-            if objects_size <= 0.50:
-                radius_min = objects_size * 3 
-                radius_max = objects_size * 4
-            elif objects_size <= 0.80:
-                radius_min = objects_size * 1.5
-                radius_max = objects_size * 2
-            else:
-                radius_min = objects_size / 1.5
-                radius_max = objects_size * 2
-            # proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max * 2 }, "no_background": True}
+        
+        # Find a point of interest in the frame to focus, mean of all the bounding boxes of the objects
+        objects_location = np.mean(objects_boxes, axis=0)
+        objects_size = np.max(np.max(objects_boxes, axis=0) - np.min(objects_boxes, axis=0))
+        print(f"objects_size: {objects_size}")
+        if objects_size <= 0.50:
+            radius_min = objects_size * 3 
+            radius_max = objects_size * 4
+        elif objects_size <= 0.80:
+            radius_min = objects_size * 1.5
+            radius_max = objects_size * 2
+        else:
+            radius_min = objects_size / 1.5
+            radius_max = objects_size * 2
+        # proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max * 2 }, "no_background": True}
 
-            for number_of_cycles, visible_objects_threshold in zip([300, 200, 150, 50], [1, 0.85, 0.75, 0.7]):
-                
-                cam_counter = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
-                                                    visible_objects_threshold, dropped_object_list, cam_counter)
-                if cam_counter == 2:
-                    break
+        for number_of_cycles, visible_objects_threshold in zip([300, 200, 150, 50], [1, 0.85, 0.75, 0.7]):
             
-            if cam_counter == 0:
-                print(f"Image with the object {base_obj.get_name()} as a main parent has been skipped, since there are no suitable camera poses")
-                continue
-                # raise Exception("No valid camera pose found!")
+            cam_counter = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
+                                                visible_objects_threshold, dropped_object_list, cam_counter)
+            if cam_counter == 2:
+                break
+        
+        if cam_counter == 0:
+            print(f"Image with the object {base_obj.get_name()} as a main parent has been skipped, since there are no suitable camera poses")
+            continue
+            # raise Exception("No valid camera pose found!")
 
         
         # Set the custom property in the the base object (the table or desk)
