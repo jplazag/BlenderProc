@@ -84,6 +84,8 @@ bvh_cache : Dict[str, mathutils.bvhtree.BVHTree] = {}
 # define the camera intrinsics
 bproc.camera.set_resolution(512, 512)
 
+desired_number_of_camera_poses = 2
+
 # Select the objects, where other objects should be sampled on
 sample_surface_objects = []
 for room_obj in room_objs:
@@ -182,7 +184,7 @@ for  base_obj in sample_surface_objects:
             cam_counter, objects_on_frames_temp = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
                                                                         visible_objects_threshold, dropped_object_list, cam_counter)
             objects_on_frames.extend(objects_on_frames_temp)
-            if cam_counter == 2:
+            if cam_counter == desired_number_of_camera_poses:
                 break
         
         if cam_counter == 0:

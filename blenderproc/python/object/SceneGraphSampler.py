@@ -32,34 +32,20 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
     
     was_putted_on = False
     was_putted_inside = False
-
-    test = False # Variable to switch to a test environment in which one could reduce the amount of objects
-                 # and generate specific configuration to analyse a certain behavior
-    parent_is_a_desk = False
+    max_n_obj = 8
 
     # Probability  of starting the placement process when the parent object can host at least one possible relation
     if True in parent_attributes["tags"] : 
             
         if np.random.uniform(0,1) <= 0.7: # 70% of probability to add a new object
-
-            if test == True:
-                # Array with al the types of relations that the parent object could host
-
-                if parent_attributes["tags"][0] and not parent_attributes["tags"][1]:
-                    parent_is_a_desk = True
-                    relations_to_establish = [0]
-                else:
-                    relations_to_establish = [1]
-                
-
-            else:
-                # Array with al the types of relations that the parent object could host
-                possible_relations =  [element for element in range(len(parent_attributes["tags"])) 
-                                    if parent_attributes["tags"][element] != False]
-                # Select randomly one of those relations
-                relations_to_establish = np.random.choice(possible_relations, 
-                                                          np.random.randint(1, len(possible_relations) + 1), 
-                                                          replace=False) # 0 = ON; 1 = INSIDE
+            
+            # Array with al the types of relations that the parent object could host
+            possible_relations =  [element for element in range(len(parent_attributes["tags"])) 
+                                if parent_attributes["tags"][element] != False]
+            # Select randomly one of those relations
+            relations_to_establish = np.random.choice(possible_relations, 
+                                                        np.random.randint(1, len(possible_relations) + 1), 
+                                                        replace=False) # 0 = ON; 1 = INSIDE
 
             for relation_to_establish in relations_to_establish:
             
@@ -85,13 +71,6 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
             
                 # Try to place 10 objects in or on the actual parent
 
-                if parent_is_a_desk:
-                    max_n_obj = 2
-                    n = 0
-                else:
-                    max_n_obj = 8
-                    n = 1
-
                 for ii in range(np.random.randint(1, max_n_obj)):
 
                     # Load the object, which should be sampled on the surface
@@ -109,8 +88,9 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
                     
                     if child_attributes["components"]:
 
-                        component = sampling_obj[1] # Maybe the name should be changed
+                        component = sampling_obj[1] 
                         sampling_obj = [sampling_obj[0]]
+
                     # Compare the size of the surface with the base of the bounding box from the sampling_obj
                     surface_area = calculate_area_of_surface(surface_obj)
                     sampling_obj_area = calculate_area_of_surface(sampling_obj[0], y_vector=np.array([0,0,1]))

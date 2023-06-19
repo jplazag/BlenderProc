@@ -88,7 +88,11 @@ def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObje
 
 def bbox_from_segmented_images(instance_segmaps: Optional[List[np.ndarray]] = None, instance_attribute_maps: Optional[List[dict]] = None):
     
-    """ Function that takes the segmentated images and generates bounding boxes for each object on the scene. """
+    """ Function that takes the segmentated images and generates bounding boxes for each object on the scene. 
+    :param instance_segmaps: List of images represented by ndarrays where each instanced object is represented with a different color,
+                            so it is easy differentiable and thus segmented.
+    :param instance_attribute_maps: List of Dictionaries that stores the instance and attributes values for each pixel, it relates
+                                    the instance of each object on scene with its attributes (in this case its categry ID)"""
     
     instance_2_category_maps = []
     
