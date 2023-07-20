@@ -9,8 +9,8 @@ import os
 from blenderproc.python.types.MeshObjectUtility import MeshObject
 from blenderproc.python.utility.Utility import Utility
 
-def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObject], data, 
-                      relations_and_features: Dict, relations_number: int = 2 ):
+def write_scene_graph(output_dir, h5_file_name, dropped_objects: list[MeshObject], objects_on_frames: list[MeshObject], data, 
+                      relations_and_features: Dict, test_bboxes: bool = False, relations_number: int = 2 ):
     
     """ Function that writes the annotations of a scene graph. It generates a h5 file with the image of 
      the graph, the bounding boxes of each element in the frame, the name of the objects and their relations
@@ -38,30 +38,50 @@ def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObje
     
     for rendered_image in range(len(data['colors'])):
 
-        objects = [scene_object.get_name().encode('utf-8') for scene_object in objects_on_frames[rendered_image]]
-        
+        objects = ["".join(scene_object.get_name()).encode('utf-8') for scene_object in objects_on_frames[rendered_image]]
+        print(objects)
         objects_number = len(objects)
         relations = np.zeros(shape=(relations_number, objects_number, objects_number))
         
         for r_n in range(relations_number):
             np.fill_diagonal(relations[r_n,:,:], -1)
 
-        for counter, scene_object in enumerate(objects_on_frames[rendered_image]):
+        names_objects_on_frames = ["".join(object_name.get_name()) for object_name in objects_on_frames[rendered_image]]
 
-            current_relation = relations_and_features["relation"][counter].split()
+        print(relations_and_features["relation"])
+
+        for relation in relations_and_features["relation"]:
 
             # Since "NONE" relations does not have a related object, it is not required to search for that object's name
 
-            if current_relation[0] != "NONE":
-                parent_index = objects.index(" ".join(current_relation[1:]).encode('utf-8'))
-                child_index = objects.index(scene_object.get_name().encode('utf-8'))
+            if relation[1] == "NONE":
+                continue
 
-                if current_relation[0] == "ON":
-                    
-                    relations[0, child_index, parent_index] = 1
-                elif current_relation[0] == "INSIDE":
-                    
-                    relations[1, child_index, parent_index] = 1
+            relation = relation.split()
+
+            print(relation)
+            print(relation[1])
+            child = relation[0]
+            parent = relation[2]
+
+            if child not in names_objects_on_frames or parent not in names_objects_on_frames:
+                continue
+
+            if len(relations_and_features["relation"]) == 0: 
+                break
+            print(relations_and_features)
+            print(dropped_objects)
+            print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+            
+            parent_index = objects.index(parent.encode('utf-8'))
+            child_index = objects.index(child.encode('utf-8'))
+
+            if relation[1] == "ON":
+                
+                relations[0, child_index, parent_index] = 1
+            elif relation[1] == "INSIDE":
+                
+                relations[1, child_index, parent_index] = 1
             
 
         group_name = str(scene_number + rendered_image)
@@ -69,15 +89,15 @@ def write_scene_graph(output_dir, h5_file_name, objects_on_frames: list[MeshObje
         annotations_file[group_name].create_dataset('attributes', data=np.array([relations_and_features["attribute"]]))
         
         
-        
-        # test_bounding_boxes(data['colors'][rendered_image], bboxes[rendered_image], scene_number + rendered_image,
-        #                         output_dir)
+        if test_bboxes:
+            test_bounding_boxes(data['colors'][rendered_image], bboxes[rendered_image], scene_number + rendered_image,
+                                output_dir)
 
         annotations_file[group_name].create_dataset('bboxes', data=np.array(bboxes[rendered_image]))
 
         annotations_file[group_name].create_dataset('image', data=np.array(data['colors'][rendered_image])) 
 
-        annotations_file[group_name].create_dataset('image_seg', data=np.array(data['instance_segmaps'][rendered_image])) 
+        # annotations_file[group_name].create_dataset('image_seg', data=np.array(data['instance_segmaps'][rendered_image])) 
 
         annotations_file[group_name].create_dataset('objects', (objects_number,), data=np.array(objects))
 
