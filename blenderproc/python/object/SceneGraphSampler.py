@@ -14,7 +14,8 @@ from blenderproc.python.utility.CollisionUtility import CollisionUtility
 
 def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_attributes: Dict, objects_boxes: list, 
                       dropped_object_list: list, category_counter: int, bvh_cache: Optional[Dict[str, mathutils.bvhtree.BVHTree]],
-                      room_objs: list[MeshObject], relations_and_attributes: Dict, verbose = True):
+                      room_objs: list[MeshObject], relations_and_attributes: Dict, verbose = True, max_n_tries: int = 8, max_n_obj: int = 15,
+                      dropped_objects_types: list = [], include_base_object = False, prioritize_relations = False):
     """ Recursive function that insert objects (one after another if the base object so allow it) in different configurations
     (ON, INSIDE) 
 
@@ -26,135 +27,207 @@ def sample_scene_graph(parent: MeshObject, parent_attributes: Dict, children_att
     :param bvh_cache: BVH tree to store the placed objects and reduce computation time.
     :param room_objs: Default objects in the room.
     :param relations_and_attributes: Dictionary that allocates the relations that each object has and some attributes.
+    :param max_n_tries: Number of objects, that are going to be tried to place pro parent 
+    :param max_n_obj: Maximum number of objects in an scene.
+    :param dropped_objects_types: Store the index of the placed object to know if a object type has already an instance
+    :param include_base_object: Consider the base objects (tables, desks,...) as relation generators 
+    :param prioritize_relations: Force the placement of objects, that could generate relations (microwaves, trays, ...)
 
     :return: Type: :class:`int`, category_counter, the counter of the custom property of all the placed objects.
         """
     
     was_putted_on = False
     was_putted_inside = False
-    max_n_obj = 8
+    
 
     # Probability  of starting the placement process when the parent object can host at least one possible relation
     if True in parent_attributes["tags"] : 
             
-        if np.random.uniform(0,1) <= 0.7: # 70% of probability to add a new object
-            
-            # Array with al the types of relations that the parent object could host
-            possible_relations =  [element for element in range(len(parent_attributes["tags"])) 
-                                if parent_attributes["tags"][element] != False]
-            # Select randomly one of those relations
-            relations_to_establish = np.random.choice(possible_relations, 
-                                                        np.random.randint(1, len(possible_relations) + 1), 
-                                                        replace=False) # 0 = ON; 1 = INSIDE
+        if np.random.uniform(0,1) >= 0.7: # 70% of probability to add a new object
+            return category_counter
+        # Array with al the types of relations that the parent object could host
+        possible_relations =  [element for element in range(len(parent_attributes["tags"])) 
+                            if parent_attributes["tags"][element]]
+        # Select randomly one of those relations
+        relations_to_establish = np.random.choice(possible_relations, 
+                                                    np.random.randint(1, len(possible_relations) + 1), 
+                                                    replace=False) # 0 = ON; 1 = INSIDE
+        
+        for relation_to_establish in relations_to_establish:
 
-            for relation_to_establish in relations_to_establish:
-            
-                if relation_to_establish == 0: # If == 0 take the upper surface of the parent; ON relation
+            if len(objects_boxes) / 8 >= max_n_obj:
+                if verbose:
+                        print("The maximal amount of objects was reached")
+                break
+        
+            if relation_to_establish == 0: # If == 0 take the upper surface of the parent; ON relation
+                # print(parent_attributes["surface_distance"])
+                if parent_attributes["surface_distance"] and not parent_attributes["tags"][1]: #If has a distance for a surface and the INSIDE tag is false
+                                                                                                # it means that the distance is for the ON relation
+                    print(f"The surface is going to be taken from {parent.get_name()}")
+                    height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
+                    surface_obj = extract_floor([parent], height_list=[height],
+                                                compare_height=0.01, new_name_for_object="Surface")[0]
+                else:
                     print(f"The surface is going to be taken from {parent.get_name()}")
                     surface_obj = slice_faces_with_normals(parent) 
-                    was_putted_on = True
+                
+                was_putted_on = True
 
-                elif relation_to_establish == 1: # If == 1 take the inner surface of the parent; INSIDE relation
-                    height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
-                    
-                    print(f"The surface is going to be taken from {parent.get_name()}")
-                    # surface_obj = bproc.object.extract_floor([parent], 
-                    #                                         height_list_path="examples/automate_semantic_relations/heights.txt",
-                    #                                         compare_height=0.01, new_name_for_object="Surface")[0]
-                    surface_obj = extract_floor([parent], 
-                                                            height_list=[height],
-                                                            compare_height=0.01, new_name_for_object="Surface")[0]
-                    was_putted_inside = True
+            elif relation_to_establish == 1: # If == 1 take the inner surface of the parent; INSIDE relation
+                height = np.min(parent.get_bound_box()[:,2]) + parent_attributes["surface_distance"]
+                
+                print(f"The surface is going to be taken from {parent.get_name()}")
+                
+                surface_obj = extract_floor([parent], height_list=[height],
+                                            compare_height=0.01, new_name_for_object="Surface")[0]
+                was_putted_inside = True
 
-                if surface_obj is None: # If a surface couldn't be found
-                    return category_counter
-            
-                # Try to place 10 objects in or on the actual parent
+            if surface_obj is None: # If a surface couldn't be found
+                if verbose:
+                        print("The surface couldn't be found")
+                return category_counter
+        
+            # Try to place max_n_tries objects in or on the actual parent
+            number_of_tries = np.random.randint(1, max_n_tries)
+            for ii in range(number_of_tries):  
 
-                for ii in range(np.random.randint(1, max_n_obj)):
 
-                    # Load the object, which should be sampled on the surface
-                    child_attributes = children_attributes[np.random.randint(0, len(children_attributes) )]
-                    # child_attributes = children_attributes[n]
-                    sampling_obj = load_obj(child_attributes["path"])
-                    actual_attribute = 0
+                if len(objects_boxes) / 8 >= max_n_obj:
                     if verbose:
+                        print("The maximal amount of objects was reached")
+                    break
+                
+                
+                # Load the object, which should be sampled on the surface
+
+                if prioritize_relations: # Force the participation of relation generation objects (Microwaves, Trays ...)
+                    
+                    if parent_attributes["name"] == False:
+                        new_children_index = np.random.choice([0, 2])
+                    else:
+                        new_children_index = np.random.randint(0, len(children_attributes))
+
+                else:
+                    new_children_index = np.random.randint(0, len(children_attributes))
+
+                if new_children_index not in dropped_objects_types:
+                    child_attributes = children_attributes[new_children_index]
+                    dropped_objects_types.append(new_children_index)
+                else:
+                    if verbose:
+                        print("There is already an instance of this type of object")
+                    continue
+                # child_attributes = children_attributes[n]
+                sampling_obj = load_obj(child_attributes["path"])
+                actual_attribute = 0
+                if verbose:
+                    print("--------------------------------------------------------------")
+                    
+                    print(f"The actual parent object is {parent.get_name()}")
+                    print(f"And the relation(s) that are going to be generate is/are {relation_to_establish}")
+                    print(f"This is the child number {ii}")
+                    print(f"The name of that child object is {sampling_obj[0].get_name()}")
+                
+                if child_attributes["components"]:
+
+                    component = sampling_obj[1] 
+                    sampling_obj = [sampling_obj[0]]
+
+                # Compare the size of the surface with the base of the bounding box from the sampling_obj
+                surface_area = calculate_area_of_surface(surface_obj)
+                sampling_obj_area = calculate_area_of_surface(sampling_obj[0], y_vector=np.array([0,0,1]))
+
+                if parent_attributes["name"] == False and surface_area < 0.140:
+                    if verbose:
+                        print("The base object surface is too small")
+                    break
+
+                if True or "microwave" in sampling_obj[0].get_name():
+                    print()
+                    print("===============================================================")
+                    print(f"The base of the child object is {round(sampling_obj_area, 3)} m^2")
+                    print(f"The area of the {parent.get_name()} surface is {round(surface_area, 3)} m^2")
+                if verbose:
+                    print(f"The base of the child object is {round(sampling_obj_area, 3)} m^2")
+                    print(f"The area of the parent surface is {round(surface_area, 3)} m^2")
+
+                if surface_area <= sampling_obj_area + 0.06 and parent_attributes["name"] != False:
+                    sampling_obj[0].delete()
+                    print("The area surface of the parent object is to small")
+
+                    if verbose: 
                         print("--------------------------------------------------------------")
-                        
-                        print(f"The actual parent object is {parent.get_name()}")
-                        print(f"And the relation(s) that are going to be generate is/are {relation_to_establish}")
-                        print(f"This is the child number {ii}")
-                        print(f"The name of that child object is {sampling_obj[0].get_name()}")
+                    continue
+
+                dropped_object = place_object(sampling_obj, surface_obj, room_objs, dropped_object_list, verbose=verbose)
+
                     
-                    if child_attributes["components"]:
 
-                        component = sampling_obj[1] 
-                        sampling_obj = [sampling_obj[0]]
-
-                    # Compare the size of the surface with the base of the bounding box from the sampling_obj
-                    surface_area = calculate_area_of_surface(surface_obj)
-                    sampling_obj_area = calculate_area_of_surface(sampling_obj[0], y_vector=np.array([0,0,1]))
+                if not dropped_object[0]: # If the sampling_obj couldn't be placed
                     if verbose:
-                        print(f"The base of the child object is {round(sampling_obj_area, 3)} m^2")
-                        print(f"The area of the parent surface is {round(surface_area, 3)} m^2")
+                        print("sampling_obj couldn't be placed")
+                        print("--------------------------------------------------------------")
+                    continue
 
-                    if surface_area <= sampling_obj_area + 0.06:
-                        sampling_obj[0].delete()
-                        print("Area too big")
+                if verbose: 
+                    print("--------------------------------------------------------------")
 
-                        if verbose: print("--------------------------------------------------------------")
-                        continue
+                # Store the type of relation of the dropped object
+                if parent_attributes["name"] != include_base_object:
 
-                    dropped_object = place_object(sampling_obj, surface_obj, room_objs, dropped_object_list, verbose=verbose)
+                    parent_name = "".join(parent.get_name())
+                    child_name = "".join(dropped_object[0].get_name())
 
-                        
-
-                    if not dropped_object[0]: # If the sampling_obj couldn't be placed
-                        if verbose:
-                            print("sampling_obj couldn't be placed")
-                            print("--------------------------------------------------------------")
-                        continue
-
-                    if verbose: print("--------------------------------------------------------------")
-
-                    # Store the type of relation of the dropped object
                     if was_putted_on:
-                        relation = f"ON {parent.get_name()}"
+                        relation = f"{child_name} ON {parent_name}"
                     elif was_putted_inside:
-                        parent_name = parent.get_name()
-                        relation = f"INSIDE {parent_name}"
-
-                    
-
-                    # Store the bounding boxes of the objects to calculate their size and location later
-                    objects_boxes.extend(dropped_object[0].get_bound_box())
-
-                    # Prepare the next child to place
-                    # next_child = children_attributes[np.random.randint(0, len(children_attributes))]
-
-
-                    category_counter = sample_scene_graph(sampling_obj[0], child_attributes, children_attributes, objects_boxes, 
-                                                          dropped_object_list, category_counter, bvh_cache, room_objs,
-                                                          relations_and_attributes, verbose=verbose) 
-                    
-                    if child_attributes["components"] == "door":
-
-                        door_rotation = door_sampling(sampling_obj[0], component, room_objs, dropped_object_list, bvh_cache)
-                        if door_rotation < np.pi/4:
-                            actual_attribute = 1.0 # The door is open
-
-                    # Set the custom property in the remaining objects of interest
-                    dropped_object[0].set_cp("category_id", category_counter + 1)
-                    category_counter += 1
-                    dropped_object_list.extend(dropped_object)
+                        relation = f"{child_name} INSIDE {parent_name}"
 
                     relations_and_attributes["relation"].append(relation)
-                    # If the object has a special characteristic that needs to be described (microwave open)
-                    relations_and_attributes["attribute"].append(actual_attribute)
-                was_putted_inside = False
-                was_putted_on = False
-                # join surface objects again
-                parent.join_with_other_objects([surface_obj])
+
+                
+                # Store the bounding boxes of the objects to calculate their size and location later
+                objects_boxes.extend(dropped_object[0].get_bound_box())
+
+                # Prepare the next child to place
+                # next_child = children_attributes[np.random.randint(0, len(children_attributes))]
+
+                if child_attributes["components"] == "door":
+
+                    actual_attribute = door_sampling(sampling_obj[0], component, room_objs, dropped_object_list, bvh_cache)
+                    # if door_rotation < np.pi/4:
+                    #     actual_attribute = 1.0 # The door is open
+
+                    child_attributes["tags"][1] = actual_attribute
+
+                category_counter = sample_scene_graph(sampling_obj[0], child_attributes, children_attributes, objects_boxes, 
+                                                    dropped_object_list, category_counter, bvh_cache, room_objs, 
+                                                    relations_and_attributes, verbose=verbose, max_n_tries=max_n_tries,
+                                                        max_n_obj=max_n_obj, dropped_objects_types=dropped_objects_types,
+                                                        prioritize_relations=prioritize_relations) 
+                
+                # if child_attributes["components"] == "door":
+
+                #     door_rotation = door_sampling(sampling_obj[0], component, room_objs, dropped_object_list, bvh_cache)
+                #     if door_rotation < np.pi/4:
+                #         actual_attribute = 1.0 # The door is open
+                if child_attributes["components"] == "door":
+                    sampling_obj[0].join_with_other_objects([component])
+
+                # Set the custom property in the remaining objects of interest
+                dropped_object[0].set_cp("category_id", category_counter + 1)
+                category_counter += 1
+                dropped_object_list.extend(dropped_object)
+
+                
+                # If the object has a special characteristic that needs to be described (microwave open)
+                
+                relations_and_attributes["attribute"].append(int(actual_attribute))
+            was_putted_inside = False
+            was_putted_on = False
+            # join surface objects again
+            parent.join_with_other_objects([surface_obj])
 
                 
     
@@ -198,7 +271,7 @@ def place_object(obj_to_place: list[MeshObject], surface_obj: MeshObject, room_o
         check_all_corners = True
 
     dropped_object_list_temp = sample_poses_on_surface(obj_to_place, surface_obj, sample_pose,
-                                                       max_tries = 100, min_distance=0.1, max_distance=10,
+                                                       max_tries = 500, min_distance=0.1, max_distance=10,
                                                        check_all_bb_corners_over_surface=check_all_corners,
                                                        objects_to_check=objects_to_check, verbose=verbose )
 
@@ -286,14 +359,12 @@ def door_sampling(base: MeshObject, door: MeshObject, room_objs: list[MeshObject
 
     for i in range(10):
         door
-        rotation = np.random.uniform(0, np.pi/2.6)
+        rotation = np.random.uniform(- np.pi/10, np.pi/10)
         door.set_rotation_euler(base.get_rotation() + [0, 0, rotation]) # from 0 to pi/2.5
         if CollisionUtility.check_intersections(door, bvh_cache, room_objs + placed_objects, []):
-            base.join_with_other_objects([door])
-            return rotation
+            return True # Open
 
     rotation = np.pi/2
     door.set_rotation_euler(base.get_rotation() + [0, 0, rotation])
 
-    base.join_with_other_objects([door])
-    return rotation
+    return False # close
