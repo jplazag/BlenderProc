@@ -54,7 +54,7 @@ def write_scene_graph(output_dir, h5_file_name, dropped_objects: list[MeshObject
 
             # Since "NONE" relations does not have a related object, it is not required to search for that object's name
 
-            if relation[1] == "NONE":
+            if relation == "NONE":
                 continue
 
             relation = relation.split()
