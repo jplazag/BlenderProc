@@ -19,10 +19,12 @@ parser.add_argument('treed_obj_path', help="Path to the downloaded 3D object")
 parser.add_argument('output_dir', nargs='?', default="examples/automate_semantic_relations/Test_01/output", 
                     help="Path to where the final files, will be saved")
 parser.add_argument('h5_file_name', default = "val.h5", help="Name of the file with the annotations")
-parser.add_argument('prioritize_relations', default = "False", help="Place objects that allow relations")
+parser.add_argument('--prioritize_relations', action="store_true", help="Place objects that allow relations")
 
-parser.add_argument('objects_focused', default = "False", help="Take frames without deviation from the objects POI")
+parser.add_argument('--objects_focused', action="store_true", help="Take frames without deviation from the objects POI")
+parser.add_argument('--include_base_object', action="store_true", help="Take the base objects as a relation generator")
 args = parser.parse_args()
+
 
 if not os.path.exists(args.front) or not os.path.exists(args.future_folder) or not os.path.exists(args.treed_obj_path):
     raise OSError("One of the three folders does not exist!")
@@ -44,7 +46,7 @@ room_objs = bproc.loader.load_front3d(
 )
 
 def suitable_camera_poses(cycles: int, objects_location, objects_size: float, radius_min: float, radius_max: float,
-                          visible_objects_threshold: float, dropped_object_list, cam_counter: int, objects_focused:str):
+                          visible_objects_threshold: float, dropped_object_list, cam_counter: int, objects_focused:bool):
     
     objects_on_all_frames = []
 
@@ -55,7 +57,7 @@ def suitable_camera_poses(cycles: int, objects_location, objects_size: float, ra
         camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
                                             radius_max=radius_max, elevation_min=0, elevation_max=15)
 
-        if objects_focused == "False":
+        if objects_focused:
             # Make sure that object is not always in the center of the camera
             toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.4)
         else:
@@ -147,10 +149,12 @@ for  base_obj in sample_surface_objects:
         
         base_object_dict = {"name": False, "tags": [True,    False], "surface_distance": False}
         
+        
         placed_obj_counter = bproc.object.sample_scene_graph(base_obj, base_object_dict, objects_of_interest, objects_boxes, 
                                                                     dropped_object_list, placed_obj_counter, bvh_cache, room_objs,
                                                                     store_relations_and_features, verbose=False,max_n_tries=8, 
                                                                     max_n_obj=4, dropped_objects_types=[], 
+                                                                    include_base_object=args.include_base_object,
                                                                     prioritize_relations=args.prioritize_relations)
         
         if not dropped_object_list:
@@ -187,15 +191,15 @@ for  base_obj in sample_surface_objects:
             radius_min = objects_size / 1.5
             radius_max = objects_size * 2
             
-
-        # Set the custom property in the the base object (the table or desk)
-        #! base_obj.set_cp("category_id", placed_obj_counter + 1)
-        #! placed_obj_counter += 1
-        #! dropped_object_list.append(base_obj)
-        # Store the type of relation of the dropped object
-        #! store_relations_and_features["relation"].append("NONE")
-        # If the object has a special characteristic that needs to be described (microwave open)
-        #! store_relations_and_features["attribute"].append(float(0.0))
+        if args.include_base_object:
+            # Set the custom property in the the base object (the table or desk)
+            base_obj.set_cp("category_id", placed_obj_counter + 1)
+            placed_obj_counter += 1
+            dropped_object_list.append(base_obj)
+            # Store the type of relation of the dropped object
+            store_relations_and_features["relation"].append("NONE")
+            # If the object has a special characteristic that needs to be described (microwave open)
+            store_relations_and_features["attribute"].append(float(0.0))
 
         objects_on_frames = []
 
