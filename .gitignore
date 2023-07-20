@@ -43,6 +43,7 @@ examples/automate_semantic_relations/val.json
 .gitignore
 examples/automate_semantic_relations/img100.xml
 examples/automate_semantic_relations/val_old.json
+examples/advanced/automate_semantic_relations/annotations/
 examples/automate_semantic_relations/annotations/valE_seg.h5
 examples/automate_semantic_relations/annotations/valE_raw.h5
 examples/automate_semantic_relations/annotations/valC_raw.h5
@@ -84,3 +85,5 @@ examples/advanced/automate_semantic_relations/second_placement.py
 examples/advanced/automate_semantic_relations/read_hdf5_files.py
 examples/advanced/automate_semantic_relations/heights.txt
 examples/advanced/automate_semantic_relations/first_placement.py
+logs_t.csv
+logs_v.csv
