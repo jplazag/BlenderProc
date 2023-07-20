@@ -6,7 +6,7 @@ import argparse
 from typing import Dict
 import mathutils
 import sys
-# import json
+import json
 # from matplotlib import pyplot as plt
 
 
@@ -18,6 +18,10 @@ parser.add_argument("front_3D_texture_path", help="Path to the 3D FRONT texture 
 parser.add_argument('treed_obj_path', help="Path to the downloaded 3D object")
 parser.add_argument('output_dir', nargs='?', default="examples/automate_semantic_relations/Test_01/output", 
                     help="Path to where the final files, will be saved")
+parser.add_argument('h5_file_name', default = "val.h5", help="Name of the file with the annotations")
+parser.add_argument('prioritize_relations', default = "False", help="Place objects that allow relations")
+
+parser.add_argument('objects_focused', default = "False", help="Take frames without deviation from the objects POI")
 args = parser.parse_args()
 
 if not os.path.exists(args.front) or not os.path.exists(args.future_folder) or not os.path.exists(args.treed_obj_path):
@@ -40,17 +44,22 @@ room_objs = bproc.loader.load_front3d(
 )
 
 def suitable_camera_poses(cycles: int, objects_location, objects_size: float, radius_min: float, radius_max: float,
-                          visible_objects_threshold: float, dropped_object_list, cam_counter: int):
+                          visible_objects_threshold: float, dropped_object_list, cam_counter: int, objects_focused:str):
     
     objects_on_all_frames = []
+
+    proximity_checks = {"min": radius_min, "avg": {"min": radius_min , "max": radius_max }, "no_background": True}
+
     for i in range(cycles):
         # Place Camera
         camera_location = bproc.sampler.shell(center=objects_location, radius_min=radius_min, 
                                             radius_max=radius_max, elevation_min=0, elevation_max=15)
 
-        # Make sure that object is not always in the center of the camera
-        toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.5)
-
+        if objects_focused == "False":
+            # Make sure that object is not always in the center of the camera
+            toward_direction = (objects_location + np.random.uniform(0, 1, size=3) * objects_size * 0.4)
+        else:
+            toward_direction = objects_location
         # Compute rotation based on vector going from location towards poi/en/stable/strings.html
 
 
@@ -66,6 +75,8 @@ def suitable_camera_poses(cycles: int, objects_location, objects_size: float, ra
         objects_on_frame = [object for object in dropped_object_list
                             if object in bproc.camera.visible_objects(cam2world_matrix, sqrt_number_of_rays=15)]
         
+        # if bproc.camera.perform_obstacle_in_view_check(cam2world_matrix, proximity_checks, bvh_tree) \
+        #     and visible_objects_threshold <= len(objects_on_frame) / len(dropped_object_list):
         if visible_objects_threshold <= len(objects_on_frame) / len(dropped_object_list):
             
             objects_on_all_frames.append(objects_on_frame)
@@ -82,7 +93,7 @@ def suitable_camera_poses(cycles: int, objects_location, objects_size: float, ra
 bvh_cache : Dict[str, mathutils.bvhtree.BVHTree] = {}
 
 # define the camera intrinsics
-bproc.camera.set_resolution(512, 512)
+bproc.camera.set_resolution(640, 480)
 
 desired_number_of_camera_poses = 2
 
@@ -90,8 +101,8 @@ desired_number_of_camera_poses = 2
 sample_surface_objects = []
 for room_obj in room_objs:
     
-    # if "table" in room_obj.get_name().lower() or "desk" in room_obj.get_name().lower(): 
-    if "dining table" in room_obj.get_name().lower(): 
+    if "table" in room_obj.get_name().lower() or "desk" in room_obj.get_name().lower(): 
+    # if "dining table" in room_obj.get_name().lower(): 
     # if "table.003" == room_obj.get_name().lower(): 
         sample_surface_objects.append(room_obj)
 
@@ -108,30 +119,39 @@ objects_of_interest = [ {"name": "op_microwave",        "tags": [True,     True]
                         {"name": "red_mug",             "tags": [False,    False],      "components": False,
                          "path": os.path.join(args.treed_obj_path,"red_mug/geometry/red_mug.obj"),
                          "surface_distance": False },
-                        {"name": "leather_tray",        "tags": [False,    True],       "components": False,
+                        {"name": "leather_tray",        "tags": [True,    False],       "components": False,
                          "path": os.path.join(args.treed_obj_path,"leather_tray/geometry/render.obj"),
                           "surface_distance": 0.005}]
 
 
-store_relations_and_features = {"relation": [], "attribute": []} # store_relations_and_features of the placed objects
-                                                                 # attributes like "open" for the microwave
+
 
 placed_obj_counter = 0
 
 for  base_obj in sample_surface_objects:
 
     
+    
     # The loop starts with and UndoAfterExecution in order to clean up the cam poses from the previous iteration and
     # also remove the dropped objects and restore the sliced up objects.
     
     with bproc.utility.UndoAfterExecution():
+
+        store_relations_and_features = {"relation": [], "attribute": []} # store_relations_and_features of the placed objects
+                                                                        # attributes like "open" for the microwave
+
         # Select the surfaces, where the object should be sampled on
         objects_boxes = []
         dropped_object_list = []
+        placed_obj_counter_static = placed_obj_counter
         
-        placed_obj_counter = bproc.object.sample_scene_graph(base_obj, {"tags": [True, False]}, objects_of_interest, objects_boxes, 
-                                                                     dropped_object_list, placed_obj_counter, bvh_cache, 
-                                                                     room_objs, store_relations_and_features, verbose=False)
+        base_object_dict = {"name": False, "tags": [True,    False], "surface_distance": False}
+        
+        placed_obj_counter = bproc.object.sample_scene_graph(base_obj, base_object_dict, objects_of_interest, objects_boxes, 
+                                                                    dropped_object_list, placed_obj_counter, bvh_cache, room_objs,
+                                                                    store_relations_and_features, verbose=False,max_n_tries=8, 
+                                                                    max_n_obj=4, dropped_objects_types=[], 
+                                                                    prioritize_relations=args.prioritize_relations)
         
         if not dropped_object_list:
             continue
@@ -169,20 +189,26 @@ for  base_obj in sample_surface_objects:
             
 
         # Set the custom property in the the base object (the table or desk)
-        base_obj.set_cp("category_id", placed_obj_counter + 1)
-        placed_obj_counter += 1
-        dropped_object_list.append(base_obj)
+        #! base_obj.set_cp("category_id", placed_obj_counter + 1)
+        #! placed_obj_counter += 1
+        #! dropped_object_list.append(base_obj)
         # Store the type of relation of the dropped object
-        store_relations_and_features["relation"].append("NONE")
+        #! store_relations_and_features["relation"].append("NONE")
         # If the object has a special characteristic that needs to be described (microwave open)
-        store_relations_and_features["attribute"].append(float(0.0))
+        #! store_relations_and_features["attribute"].append(float(0.0))
 
         objects_on_frames = []
 
-        for number_of_cycles, visible_objects_threshold in zip([300, 200, 150, 50], [1, 0.85, 0.75, 0.7]):
+        tries = [300, 200, 150, 50]
+        thresholds = [1, 0.85, 0.75, 0.7]
+
+        # tries = [300]
+        # thresholds = [1]
+
+        for number_of_cycles, visible_objects_threshold in zip(tries, thresholds):
             
             cam_counter, objects_on_frames_temp = suitable_camera_poses(number_of_cycles, objects_location, objects_size, radius_min, radius_max,
-                                                                        visible_objects_threshold, dropped_object_list, cam_counter)
+                                                                        visible_objects_threshold, dropped_object_list, cam_counter, args.objects_focused)
             objects_on_frames.extend(objects_on_frames_temp)
             if cam_counter == desired_number_of_camera_poses:
                 break
@@ -197,8 +223,11 @@ for  base_obj in sample_surface_objects:
 
         data = bproc.renderer.render()
 
-        h5_file_name = "val.h5"
-        bproc.writer.write_scene_graph(args.output_dir, h5_file_name, objects_on_frames, data, store_relations_and_features)
+        
+
+        
+        bproc.writer.write_scene_graph(args.output_dir, args.h5_file_name, dropped_object_list, objects_on_frames, 
+                                       data, store_relations_and_features)
 
         bproc.writer.write_hdf5(args.output_dir, data, append_to_existing_output=True)
         
